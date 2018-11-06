@@ -1,0 +1,29 @@
+language: generic
+
+sudo: false
+
+cache:
+  directories:
+    - $HOME/miniconda3
+
+before_cache:
+  - rm -rf $HOME/miniconda3/pkgs/cache
+  - rm -rf $HOME/miniconda3/envs/specialsoss
+
+os:
+  - linux
+  - osx
+
+env:
+  - PYTHON_VERSION="3.5"
+  - PYTHON_VERSION="3.6"
+  - PYTHON_VERSION="3.7"
+
+before_install:
+  - export PATH="$HOME/miniconda3/bin:$PATH"
+
+install:
+  - ci/install_conda.sh
+  - ci/setup_conda_env.sh
+  - source activate specialsoss
+  - python setup.py install
