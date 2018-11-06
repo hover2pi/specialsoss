@@ -1,1 +1,1 @@
-from sossobs import SossObs
+from .sossobs import SossObs
