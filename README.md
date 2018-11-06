@@ -1,5 +1,7 @@
 # `specialsoss`: SPECtral Image AnaLysis for SOSS
 
+[![Build Status](https://travis-ci.org/hover2pi/specialsoss.svg?branch=master)](https://travis-ci.org/hover2pi/specialsoss)
+
 Authors: Joe Filippazzo, Kevin Stevenson
 
 This pure Python package performs optimal spectral extraction routines for the Single Object Slitless Spectroscopy (SOSS) mode of the Near-Infrared Imager and Slitless Spectrograph (NIRISS) instrument onboard the James Webb Space Telescope (JWST).
