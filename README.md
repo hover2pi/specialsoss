@@ -33,3 +33,5 @@ That's it! Now we can take a look at the extracted time-series spectra:
 ```
 obs.plot()
 ```
+
+![SOSS Extraction](figures/extracted_spectra.png)
