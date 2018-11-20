@@ -7,7 +7,7 @@ specialsoss
         :target: https://pypi.python.org/pypi/specialsoss
 
 .. image:: https://img.shields.io/travis/hover2pi/specialsoss.svg
-        :target: https://travis-ci.com/hover2pi/specialsoss
+        :target: https://travis-ci.org/hover2pi/specialsoss
 
 .. image:: https://readthedocs.org/projects/specialsoss/badge/?version=latest
         :target: https://specialsoss.readthedocs.io/en/latest/?badge=latest
