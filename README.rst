@@ -13,8 +13,8 @@ specialsoss
         :target: https://specialsoss.readthedocs.io/en/latest/?badge=latest
         :alt: Documentation Status
 
-.. image:: https://coveralls.io/repos/github/hover2pi/specialsoss/badge.svg?branch=coveralls
-        :target: https://img.shields.io/coveralls/github/hover2pi/specialsoss?branch=coveralls
+.. image:: https://img.shields.io/coveralls/github/hover2pi/specialsoss.svg
+        :target: https://img.shields.io/coveralls/github/hover2pi/specialsoss.svg
 
 .. image:: https://pyup.io/repos/github/hover2pi/specialsoss/shield.svg
      :target: https://pyup.io/repos/github/hover2pi/specialsoss/
