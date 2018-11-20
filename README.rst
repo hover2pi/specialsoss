@@ -35,7 +35,7 @@ Additional resources:
 
 - `Full documentation <https://specialsoss.readthedocs.io/en/latest/>`_
 - `Jupyter notebook <https://github.com/spacetelescope/specialsoss/blob/master/notebooks/specialsoss_demo.ipynb>`_
-- `Build history <https://travis-ci.com/hover2pi/specialsoss>`_
+- `Build history <https://travis-ci.org/hover2pi/specialsoss>`_
 
 
 Extracting Spectra from SOSS Observations
