@@ -14,7 +14,7 @@ specialsoss
         :alt: Documentation Status
 
 .. image:: https://coveralls.io/repos/github/hover2pi/specialsoss/badge.svg?branch=coveralls
-        :target: https://coveralls.io/github/hover2pi/specialsoss?branch=coveralls
+        :target: https://img.shields.io/coveralls/github/hover2pi/specialsoss?branch=coveralls
 
 .. image:: https://pyup.io/repos/github/hover2pi/specialsoss/shield.svg
      :target: https://pyup.io/repos/github/hover2pi/specialsoss/
