@@ -1,29 +1,28 @@
-language: generic
+# Config file for automatic testing at travis-ci.org
 
-sudo: false
+language: python
+python:
+  - 3.6
+  - 3.5
 
-cache:
-  directories:
-    - $HOME/miniconda3
-
-before_cache:
-  - rm -rf $HOME/miniconda3/pkgs/cache
-  - rm -rf $HOME/miniconda3/envs/specialsoss
-
-os:
-  - linux
-  - osx
-
-env:
-  - PYTHON_VERSION="3.5"
-  - PYTHON_VERSION="3.6"
-  - PYTHON_VERSION="3.7"
-
-before_install:
-  - export PATH="$HOME/miniconda3/bin:$PATH"
-
+# command to install dependencies, e.g. pip install -r requirements.txt --use-mirrors
 install:
-  - ci/install_conda.sh
-  - ci/setup_conda_env.sh
-  - source activate specialsoss
-  - python setup.py install
+  - pip install -r requirements_dev.txt
+  - pip install pytest pytest-cov coveralls
+
+# command to run tests, e.g. python setup.py test
+script:
+  - python -m pytest --cov tests/
+  - coveralls
+
+# deploy new versions to PyPI
+deploy:
+  provider: pypi
+  distributions: sdist bdist_wheel
+  user: hover2pi
+  password:
+    secure: B0b0th#dog123pypi
+  on:
+    tags: true
+    repo: hover2pi/specialsoss
+    python: 3.5
