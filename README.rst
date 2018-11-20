@@ -14,7 +14,7 @@ specialsoss
         :alt: Documentation Status
 
 .. image:: https://img.shields.io/coveralls/github/hover2pi/specialsoss.svg
-        :target: https://img.shields.io/coveralls/github/hover2pi/specialsoss.svg
+        :target: https://coveralls.io/github/hover2pi/specialsoss
 
 .. image:: https://pyup.io/repos/github/hover2pi/specialsoss/shield.svg
      :target: https://pyup.io/repos/github/hover2pi/specialsoss/
