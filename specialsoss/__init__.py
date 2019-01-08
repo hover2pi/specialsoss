@@ -6,5 +6,5 @@ __author__ = """Joe Filippazzo"""
 __email__ = 'jfilippazzo@stsci.edu'
 __version__ = '0.1.0'
 
-from . import crossdispersion
-from . import specialsoss
+from .crossdispersion import *
+from .specialsoss import *
