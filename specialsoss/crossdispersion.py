@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 
-def batman(x, mu1, sigma1, A1, sigma2, A2, sep):
+def batman(x, mu0, sigma0, A0, sigma1, A1, sep):
     """
     Generate a batman function of the given parameters
 
@@ -15,32 +15,32 @@ def batman(x, mu1, sigma1, A1, sigma2, A2, sep):
     ----------
     x: array-like
         The x-axis on which to generate the function
-    mu1: float
-        The x-position of the first peak center
-    sigma1: float
-        The stanfard deviation of the two peak distributions
-    A1: float
-        The amplitude of the two peaks
-    sigma2: float
+    mu0: float
+        The x-position of the center peak
+    sigma0: float
         The stanfard deviation of the center peak
-    A2: float
+    A0: float
         The amplitude of the center peak
+    sigma1: float
+        The stanfard deviation of the outer peaks
+    A1: float
+        The amplitude of the outer peaks
     sep: float
-        The separation between the two peaks
+        The separation of the outer peaks from the center peak
 
     Returns
     -------
     np.ndarray
         The y-axis values of the mixed Gaussian
     """
-    peak1 = gaussian(x, mu1, sigma1, A1)
-    peak2 = gaussian(x, mu1+(sep/2.), sigma2, A2)
-    peak3 = gaussian(x, mu1+sep, sigma1, A1)
+    peak1 = gaussian(x, mu0-sep, sigma1, A1)
+    peak2 = gaussian(x, mu0, sigma0, A0)
+    peak3 = gaussian(x, mu0+sep, sigma1, A1)
 
     return peak1 + peak2 + peak3
 
 
-def batmen(x, mu1, sigma1, A1, sigma2, A2, sep, mu3, sigma3, A3, sigma4, A4):
+def batmen(x, mu0_1, sigma0_1, A0_1, sigma1_1, A1_1, sep_1, mu0_2, sigma0_2, A0_2, sigma1_2, A1_2, sep_2):
     """
     Generate two batman functions of the given parameters
 
@@ -48,26 +48,38 @@ def batmen(x, mu1, sigma1, A1, sigma2, A2, sep, mu3, sigma3, A3, sigma4, A4):
     ----------
     x: array-like
         The x-axis on which to generate the function
-    mu1: float
-        The x-position of the first peak center
-    sigma1: float
-        The stanfard deviation of the two peak distributions
-    A1: float
-        The amplitude of the two peaks
-    sigma2: float
-        The stanfard deviation of the center peak
-    A2: float
-        The amplitude of the center peak
-    sep: float
-        The separation between the two peaks
+    mu0_1: float
+        The x-position of the center peak, first psf
+    sigma0_1: float
+        The stanfard deviation of the center peak, first psf
+    A0_1: float
+        The amplitude of the center peak, first psf
+    sigma1_1: float
+        The stanfard deviation of the outer peaks, first psf
+    A1_1: float
+        The amplitude of the outer peaks, first psf
+    sep_1: float
+        The separation of the outer peaks from the center peak, first psf
+    mu0_2: float
+        The x-position of the center peak, second psf
+    sigma0_2: float
+        The stanfard deviation of the center peak, second psf
+    A0_2: float
+        The amplitude of the center peak, second psf
+    sigma1_2: float
+        The stanfard deviation of the outer peaks, second psf
+    A1_2: float
+        The amplitude of the outer peaks, second psf
+    sep_2: float
+        The separation of the outer peaks from the center peak, second psf
 
     Returns
     -------
     np.ndarray
         The y-axis values of the mixed Gaussian
     """
-    batman1 = batman(x, mu1, sigma1, A1, sigma2, A2, sep)
-    batman2 = batman(x, mu3, sigma3, A3, sigma4, A4, sep)
+    batman1 = batman(x, mu0_1, sigma0_1, A0_1, sigma1_1, A1_1, sep_1)
+    batman2 = batman(x, mu0_2, sigma0_2, A0_2, sigma1_2, A1_2, sep_2)
 
     return batman1 + batman2
 

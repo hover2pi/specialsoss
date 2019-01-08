@@ -35,7 +35,7 @@ setup(
             'specialsoss=specialsoss.cli:main',
         ],
     },
-    install_requires=requirements,
+    install_requires=['numpy', 'astropy', 'bokeh'],
     license="MIT license",
     long_description=readme + '\n\n' + history,
     include_package_data=True,
