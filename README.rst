@@ -62,5 +62,5 @@ That’s it! Now we can take a look at the extracted time-series spectra:
 
    obs.plot()
 
-.. figure:: specialsoss/figures/extracted_spectra.png
+.. figure:: specialsoss/files/extracted_spectra.png
    :alt: SOSS Extraction
