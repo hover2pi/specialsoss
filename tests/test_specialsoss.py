@@ -37,7 +37,7 @@ class TestSossObs(unittest.TestCase):
         assert obs.wavecal.shape == (3, 256, 2048)
 
 
-class TestTestObs(unittest.TestCase):
+class TestSimObs(unittest.TestCase):
     """Test TestObs object"""
     def setUp(self):
         """Test instance setup"""
@@ -45,5 +45,17 @@ class TestTestObs(unittest.TestCase):
 
     def test_init(self):
         """Test that the test object loads properly"""
-        obs = specialsoss.TestObs()
-        assert obs.name == 'Test Observation'
+        obs = specialsoss.SimObs()
+        assert obs.name == 'Simulated Observation'
+
+
+class TestRealObs(unittest.TestCase):
+    """Test TestObs object"""
+    def setUp(self):
+        """Test instance setup"""
+        pass
+
+    def test_init(self):
+        """Test that the test object loads properly"""
+        obs = specialsoss.RealObs()
+        assert obs.name == 'CV3 Observation'
