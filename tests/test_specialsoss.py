@@ -18,7 +18,7 @@ class TestSossObs(unittest.TestCase):
     def setUp(self):
         """Test instance setup"""
         # Make Spectrum class for testing
-        self.file = resource_filename('specialsoss', 'files/SOSS_A0.fits')
+        self.file = resource_filename('specialsoss', 'files/SOSS256_sim.fits')
 
     def test_init(self):
         """Test that a purely photometric SED can be creted"""
