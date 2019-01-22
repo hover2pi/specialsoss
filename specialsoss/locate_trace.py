@@ -2,10 +2,13 @@
 import os
 from functools import partial
 from multiprocessing.dummy import Pool as ThreadPool
+from pkg_resources import resource_filename
 import time
 import warnings
 
+from astropy.io import fits
 from bokeh.plotting import figure, show
+from bokeh.layouts import column
 from bokeh.models import Span
 from bokeh.models.glyphs import Step
 import numpy as np
@@ -16,7 +19,7 @@ from . import crossdispersion as xdsp
 warnings.simplefilter('ignore')
 
 
-def find_orders(frame, n_jobs=4, plot=True, **kwargs):
+def order_masks(frame, subarray='SUBSTRIP256', n_jobs=4, plot=False, save=False, **kwargs):
     """
     Generate a mask of the SOSS frame based on the column fits from isolate_signal
 
@@ -24,39 +27,82 @@ def find_orders(frame, n_jobs=4, plot=True, **kwargs):
     ----------
     frame: array-like
         The 2D frame of SOSS data
+    n_jobs: int
+        The number of jobs for multiprocessing
+    plot: bool
+        Plot the masks
+    save: bool
+        Save the masks to file
 
     Returns
     -------
     sequence
         A masked frame for each trace order
     """
-    # Make 2 unmasked frames
-    order1 = np.zeros_like(frame)
-    order2 = np.zeros_like(frame)
+    # Get the file
+    file = resource_filename('specialsoss', 'files/order_masks.npy')
 
-    # Multiprocess spectral extraction for frames
-    print("Coffee time! This takes about 3 minutes...")
-    pool = ThreadPool(n_jobs)
-    func = partial(isolate_signal, frame=frame, **kwargs)
-    masks = pool.map(func, range(5))
-    pool.close()
-    pool.join()
+    # Generate the trace masks
+    if save:
 
-    # Set the mask in each column
-    for n, (ord1, ord2) in enumerate(masks):
-        order1[:, n] = ord1
-        order2[:, n] = ord2
+        # Make 2 unmasked frames
+        order1 = np.zeros_like(frame)
+        order2 = np.zeros_like(frame)
+
+        # Multiprocess spectral extraction for frames
+        print("Coffee time! This takes about 3 minutes...")
+        pool = ThreadPool(n_jobs)
+        func = partial(isolate_signal, frame=frame, **kwargs)
+        masks = pool.map(func, range(2048))
+        pool.close()
+        pool.join()
+
+        # Set the mask in each column
+        for n, (ord1, ord2) in enumerate(masks):
+            order1[:, n] = ord1
+            order2[:, n] = ord2
+
+        # Save to file
+        np.save(file, np.array([order1, order2]))
+
+    # Or grab them from file
+    else:
+
+        # Open the file
+        try:
+            order1, order2 = np.load(file)
+        except FileNotFoundError:
+            print("No order mask file. Generating one now...")
+            order1, order2 = order_masks(frame, save=True, plot=plot)
+            return
+
+    # Trim if SUBSTRIP96
+    if subarray == 'SUBSTRIP96':
+        order1 = order1[:96]
+        order2 = order2[:96]
 
     if plot:
 
         # Make the figure
-        fig = figure(x_range=(0, frame.shape[1]), y_range=(0, frame.shape[0]),
-                     tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")],
-                     width=int(frame.shape[1]/2), height=int(frame.shape[0]/2))
+        height, width = order1.shape
+        fig1 = figure(x_range=(0, width), y_range=(0, height),
+                      tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")],
+                      width=int(width/2), height=height, title='Order 1 Mask')
 
-        # Plot the frame
-        fig.image(image=[frame], x=0, y=0, dw=frame.shape[1],
-                  dh=frame.shape[0], palette='Viridis256')
+        # Make the figure
+        fig2 = figure(x_range=(0, width), y_range=(0, height),
+                      tooltips=[("x", "$x"), ("y", "$y"), ("value", "@image")],
+                      width=int(width/2), height=height, title='Order 2 Mask')
+
+        # Plot the order mask
+        fig1.image(image=[order1], x=0, y=0, dw=width, dh=height,
+                   palette='Viridis256')
+
+        # Plot the order mask
+        fig2.image(image=[order2], x=0, y=0, dw=width, dh=height,
+                   palette='Viridis256')
+
+        show(column([fig1, fig2]))
 
     return order1, order2
 
@@ -78,6 +124,12 @@ def isolate_signal(idx, frame, bounds=None, sigma=3, err=None, radius=None, filt
         A sequence of length-n (lower,upper) bounds on the n-parameters of func
     sigma: float
         The number of standard deviations to use when defining the signal
+    err: int (optional)
+        The uncertainty of the fit
+    radius: int (optional)
+        A constant radius for the trace at all wavelengths
+    filt: str
+        The filter used in the observations, ['CLEAR', 'F277W']
     plot: bool
         Plot the signal with the fit function
     
@@ -252,3 +304,77 @@ def trace_polynomial(order):
               [2.35792131e-13, 2.42999478e-08, 1.03641247e-05, -3.63088657e-02, 9.96766537e+01]]
 
     return np.polyval(coeffs[order-1], np.arange(2048))
+
+
+def wavelength_bins(save=False, subarray='SUBSTRIP256', wavecal_file=None):
+    """Determine all the pixels in each wavelength bin for orders 1, 2, and 3
+
+    Parameters
+    ----------
+    save: bool
+        Save the binned pixels to file
+    subarray: str
+        The subarray to use
+    wavecal_file: str (optional)
+        The path to the wavelength calibration file
+    """
+    file = resource_filename('specialsoss', 'files/wavelength_bins.npy')
+
+    if save:
+
+        # Load the filters
+        filters = []
+        for ord in [1, 2, 3]:
+            filt = resource_filename('specialsoss', 'files/GR700XD_{}.txt'.format(ord))
+            if os.path.isfile(filt):
+                filters.append(np.genfromtxt(filt, unpack=True))
+
+        # Load the wavelength calibration file
+        if wavecal_file is None:
+            wavecal_file = resource_filename('specialsoss', 'files/soss_wavelengths_fullframe.fits')
+
+        # Pull out the data for the appropriate subarray
+        wavecal = fits.getdata(wavecal_file).swapaxes(-2, -1)
+        signal_pixels = [[], [], []]
+
+        # # Store the pixel coordinates of each wavelength bin for each order
+        for order, (throughput, wave_map) in enumerate(zip(filters, wavecal)):
+
+            # Make a mask for each wavelength bin
+            for n, w in enumerate(throughput[0]):
+
+                # Edge cases
+                try:
+                    w0 = throughput[0][n-1]
+                except IndexError:
+                    w0 = 0.1
+
+                try:
+                    w1 = throughput[0][n+1]
+                except IndexError:
+                    w1 = 10
+
+                # Define the width of the wavelength bin as half-way
+                # between neighboring points
+                dw0 = np.mean([w0, w])
+                dw1 = np.mean([w1, w])
+
+                # Isolate the signal pixels
+                signal = np.where(np.logical_and(wave_map >= dw0, wave_map < dw1))
+
+                # Add them to the list
+                signal_pixels[order].append(signal)
+
+        # Save to file
+        np.save(file, signal_pixels)
+
+    else:
+
+        # Load from file
+        try:
+            signal_pixels = np.load(file)
+        except FileNotFoundError:
+            print("No wavelength bin file. Generating one now...")
+            signal_pixels = wavelength_bins(save=True)
+
+    return signal_pixels

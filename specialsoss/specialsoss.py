@@ -17,7 +17,7 @@ from . import crossdispersion as xdisp
 from . import locate_trace as lt
 
 
-def extract_spectrum(frame, pixels):
+def extract_flux(frame, pixels):
     """Extract all spectral orders from a given frame
 
     Parameters
@@ -54,9 +54,21 @@ class SossObs:
         # Load the wavelength calibration and throughput curves
         self.load_filters()
         self.load_wavecal()
+        self.load_wavebins()
 
         # Compose a median image from the stack
         self.median = np.median(self.datacube, axis=(0, 1))
+
+        # Load the default order masks
+        self.order_masks = lt.order_masks(self.median)
+
+    def caluclate_order_masks(self):
+        """Calculate the order masks from the median image
+        """
+        # Find the trace in all columns
+        self.order_masks = lt.order_masks(self.median, save=True)
+
+        print("New order masks calculated from median image.")
 
     def extract(self, n_jobs=4):
         """Extract the 1D spectrum from a frame
@@ -117,6 +129,10 @@ class SossObs:
             if os.path.isfile(file):
                 self.filters.append(np.genfromtxt(file, unpack=True))
 
+    def load_wavebins(self):
+        """Load the wavelength bins for signal extraction"""
+        self.wavebins = lt.wavelength_bins()
+
     def load_wavecal(self, file=None):
         """Load the wavelength calibration for orders 1, 2, and 3
 
@@ -125,69 +141,12 @@ class SossObs:
         file: str (optional)
             The path to the wavelength calibration file
         """
-        # Make sure the filters are loaded
-        if self.filters is None:
-            self.load_filters()
-
         # Load default if None
         if file is None:
             file = resource_filename('specialsoss', 'files/soss_wavelengths_fullframe.fits')
 
         # Pull out the data for the appropriate subarray
         self.wavecal = fits.getdata(file).swapaxes(-2, -1)[:, :self.SUBSIZE2]
-        self.signal_pixels = [[], [], []]
-
-        # # Store the pixel coordinates of each wavelength bin for each order
-        # for order, (throughput, wave_map) in enumerate(zip(self.filters, self.wavecal)):
-        #
-        #     # Make a mask for each wavelength bin
-        #     for n, w in enumerate(throughput[0]):
-        #
-        #         # Edge cases
-        #         try:
-        #             w0 = throughput[0][n-1]
-        #         except IndexError:
-        #             w0 = 0.1
-        #
-        #         try:
-        #             w1 = throughput[0][n+1]
-        #         except IndexError:
-        #             w1 = 10
-        #
-        #         # Define the width of the wavelength bin as half-way
-        #         # between neighboring points
-        #         dw0 = np.mean([w0, w])
-        #         dw1 = np.mean([w1, w])
-        #
-        #         # Isolate the signal pixels
-        #         signal = np.where(np.logical_and(wave_map >= dw0, wave_map < dw1))
-        #
-        #         # Add them to the list
-        #         self.signal_pixels[order].append(signal)
-
-    # def locate_traces(self):
-    #     """Locate the traces in the data by convolving a function in each
-    #     column
-    #
-    #     Parameters
-    #     ----------
-    #     func: function
-    #         The function to fit
-    #     bounds: sequence
-    #         The lower and upper bounds for the function input parameters
-    #     """
-    #     # Find the trace in all columns
-    #     o1, o2 = lt.function_traces(median)
-    #
-    #     return o1, o2
-    #
-    #     # # Get a trace mask by fitting the given function
-    #     # # to each column in the median image
-    #     # self.mask = self.frame_mask(median, func, bounds)
-    #     #
-    #     # # Apply the median trace mask to each image to mask the whole cube
-    #     # mask_arr = np.array([self.mask]*len(self.datacube))
-    #     # self.maskedcube = ma.array(self.datacube, mask=mask_arr)
 
     def plot_frame(self, idx=None, log_scale=True, draw=True):
         """Plot a single frame of the data
@@ -230,12 +189,23 @@ class SossObs:
     #     self.datacube = jwst.run(filepath, **kwargs)
 
 
-class TestObs(SossObs):
-    """A test instance with the data preloaded"""
+class RealObs(SossObs):
+    """A test instance with CV3 data loaded"""
     def __init__(self, **kwargs):
-        """Initiate the object"""
+        """Initialize the object"""
         # Get the file
-        file = resource_filename('specialsoss', 'files/SOSS256_test.fits')
+        file = resource_filename('specialsoss', 'files/SOSS256_CV3.fits')
 
         # Inherit from SossObs
-        super().__init__(file, name='Test Observation', **kwargs)
+        super().__init__(file, name='CV3 Observation', **kwargs)
+
+
+class SimObs(SossObs):
+    """A test instance with the data preloaded"""
+    def __init__(self, **kwargs):
+        """Initialize the object"""
+        # Get the file
+        file = resource_filename('specialsoss', 'files/SOSS256_sim.fits')
+
+        # Inherit from SossObs
+        super().__init__(file, name='Simulated Observation', **kwargs)
