@@ -15,6 +15,7 @@ import numpy as np
 
 from . import crossdispersion as xdisp
 from . import locate_trace as lt
+from . import extract1d as ex
 
 
 def extract_flux(frame, pixels):
