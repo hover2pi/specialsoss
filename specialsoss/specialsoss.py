@@ -72,6 +72,7 @@ class SossObs:
     def caluclate_order_masks(self):
         """
         Calculate the order masks from the median image
+
         """
         # Find the trace in all columns
         self.order_masks = lt.order_masks(self.median, save=True)
@@ -154,6 +155,10 @@ class SossObs:
         filepath: str
             The path to the SOSS data
         """
+        # Make sure the file exists
+        if not os.path.exists(filepath) or not filepath.endswith('.fits'):
+            raise IOError(filepath, ": Invalid file")
+
         # Get the data
         self.raw_data = fits.getdata(filepath, **kwargs)
         self.header = fits.getheader(filepath)

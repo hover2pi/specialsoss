@@ -287,7 +287,7 @@ def isolate_signal(idx, frame, bounds=None, sigma=3, err=None, radius=None, filt
     return ord1, ord2
 
 
-def trace_polynomial(order=None):
+def trace_polynomial(order):
     """The polynomial that describes the order trace
 
     Parameters
