@@ -102,3 +102,8 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Pipeline processed files
+files/*_rate.fits
+files/*_rateints.fits
+files/*_ramp.fits
