@@ -16,7 +16,9 @@ import numpy as np
 
 from . import crossdispersion as xdisp
 from . import locate_trace as lt
-from . import extract1d as ex
+from . import reconstruction as rc
+from . import summation as sm
+from . import binning as bn
 
 
 def extract_flux(frame, coeffs=[lt.trace_polynomial(1), lt.trace_polynomial(2)], ):
@@ -69,6 +71,9 @@ class SossObs:
         self.load_wavecal()
         self.load_wavebins()
 
+        # Placeholder for the extracted spectra
+        self.spectra = {}
+
     def caluclate_order_masks(self):
         """
         Calculate the order masks from the median image
@@ -79,47 +84,35 @@ class SossObs:
 
         print("New order masks calculated from median image.")
 
-    def extract(self, n_jobs=4, **kwargs):
+    def extract(self, method="bin", **kwargs):
         """
-        Extract the 1D spectrum from a frame
+        Extract the 1D spectra from the time series data
+        using the specified method
 
         Parameters
         ----------
-        idx: int
-            The index of the frame to extract
-
-        Returns
-        -------
-        array
-            The extracted 1D spectrum
+        method: str
+            The method to use, ['reconstruct', 'wavebins']
         """
+        # Validate the method
+        valid_methods = ["reconstruct", "bin", "sum"]
+        if method not in valid_methods:
+            raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
+
+        if method == "bin":
+             self.spectra[method] = bn.extract(self.data)
+
+        if method == "reconstruct":
+            self.spectra[method] = rc.extract(self.data)
+
+        if method == "sum":
+            self.spectra[method] = sm.extract(self.data)
+
+
         # IDEAL
         # 1. Get the trace locations from the median frame and save ()
         # 2. Get the order masks from the traces and user input psf width (self.order_masks)
         # 3. 
-        
-        
-        # frame = self.median
-        
-        
-        
-        wave, flux, *_ = np.genfromtxt('/Users/jfilippazzo/Dropbox/BDNYC_spectra/SpeX/Prism/LHS132.txt', unpack=True)
-        scales = {'w{}'.format(n): v for n, v in enumerate(flux)}
-        n_psfs = len(flux)
-        offset = 1
-        pix = 76
-        xy = 30
-        frame = ex.make_frame(n_psfs=n_psfs, offset=offset, pix=pix, xy=xy, plot=True, **scales)
-        self.result = ex.lmfitter(frame, method='leastsq', n_psfs=n_psfs, offset=offset, pix=pix, xy=xy, **kwargs)
-
-        # # Multiprocess spectral extraction for frames
-        # pool = ThreadPool(n_jobs)
-        # func = partial(extract_spectrum, filters=self.filters, wavecal=self.wavecal)
-        # specs = pool.map(func, self.raw_data)
-        # pool.close()
-        # pool.join()
-        #
-        # self.tso = np.array(specs)
 
     def _get_frame(self, idx=None):
         """

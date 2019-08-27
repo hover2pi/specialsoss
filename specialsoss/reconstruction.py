@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""A module of 1D spectral extraction routines"""
+"""A module for the 1D spectral extraction reconstruction method"""
 
 import copy
 
@@ -13,6 +13,25 @@ import numpy as np
 from pkg_resources import resource_filename
 
 from . import locate_trace as lt
+
+
+# wave, flux, *_ = np.genfromtxt('/Users/jfilippazzo/Dropbox/BDNYC_spectra/SpeX/Prism/LHS132.txt', unpack=True)
+# scales = {'w{}'.format(n): v for n, v in enumerate(flux)}
+# n_psfs = len(flux)
+# offset = 1
+# pix = 76
+# xy = 30
+# frame = rc.make_frame(n_psfs=n_psfs, offset=offset, pix=pix, xy=xy, plot=True, **scales)
+# self.result = ex.lmfitter(frame, method='leastsq', n_psfs=n_psfs, offset=offset, pix=pix, xy=xy, **kwargs)
+
+# # Multiprocess spectral extraction for frames
+# pool = ThreadPool(n_jobs)
+# func = partial(extract_spectrum, filters=self.filters, wavecal=self.wavecal)
+# specs = pool.map(func, self.raw_data)
+# pool.close()
+# pool.join()
+#
+# self.tso = np.array(specs)
 
 
 def calc_spectrum(**scales):
