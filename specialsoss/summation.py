@@ -11,3 +11,20 @@ import numpy as np
 from pkg_resources import resource_filename
 
 from . import locate_trace as lt
+
+
+def extract(data):
+    """
+    Extract the time-series 1D spectra from a data cube
+
+    Parameters
+    ----------
+    data: array-like
+        The time-series 2D data
+
+    Returns
+    -------
+    np.ndarray
+        The time-series 1D spectra
+    """
+    return np.nansum(data, axis=1)

@@ -84,7 +84,7 @@ class SossObs:
 
         print("New order masks calculated from median image.")
 
-    def extract(self, method="bin", **kwargs):
+    def extract(self, method="sum", **kwargs):
         """
         Extract the 1D spectra from the time series data
         using the specified method
@@ -100,19 +100,13 @@ class SossObs:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         if method == "bin":
-             self.spectra[method] = bn.extract(self.data)
+             self.spectra[method] = bn.extract(self.data, **kwargs)
 
         if method == "reconstruct":
-            self.spectra[method] = rc.extract(self.data)
+            self.spectra[method] = rc.extract(self.data, **kwargs)
 
         if method == "sum":
-            self.spectra[method] = sm.extract(self.data)
-
-
-        # IDEAL
-        # 1. Get the trace locations from the median frame and save ()
-        # 2. Get the order masks from the traces and user input psf width (self.order_masks)
-        # 3. 
+            self.spectra[method] = sm.extract(self.data, **kwargs)
 
     def _get_frame(self, idx=None):
         """
