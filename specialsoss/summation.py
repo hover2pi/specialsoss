@@ -2,18 +2,10 @@
 
 """A module for the 1D spectral extraction summation method"""
 
-import copy
-
-from astropy.io import fits
-import astropy.units as q
-from bokeh.plotting import figure, show
 import numpy as np
-from pkg_resources import resource_filename
-
-from . import locate_trace as lt
 
 
-def extract(data):
+def extract(data, wavemap, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
@@ -21,10 +13,15 @@ def extract(data):
     ----------
     data: array-like
         The time-series 2D data
+    wavemap: array-like
+        The wavelength map for each order
 
     Returns
     -------
-    np.ndarray
-        The time-series 1D spectra
+    tuple
+        The wavelength array and time-series 1D spectra
     """
-    return np.nansum(data, axis=1)
+    # Calculate the mean wavelength for the first order
+    wavelength = np.nanmean(wavemap[0], axis=0)
+
+    return wavelength, np.nansum(data, axis=2)

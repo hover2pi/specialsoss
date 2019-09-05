@@ -37,7 +37,7 @@ class SossObs:
     """
     A class object to extract and manipulate SOSS spectra
     """
-    def __init__(self, filepath, name='My SOSS Observations', process=True, **kwargs):
+    def __init__(self, filepath, name='My SOSS Observations', calibrate=True, **kwargs):
         """
         Initialize the SOSS extraction object
 
@@ -47,7 +47,7 @@ class SossObs:
             The path to the SOSS data
         name: str
             The name of the observation set
-        process: bool
+        calibrate: bool
             Pipeline process the input file
         """
         # Make sure the file exists
@@ -60,7 +60,7 @@ class SossObs:
         self.time = None
 
         # Pipeline process
-        if process:
+        if calibrate:
             self.filepath = self._pipeline_process(filepath)
 
         # Load the file
@@ -72,6 +72,7 @@ class SossObs:
         self.load_wavebins()
 
         # Placeholder for the extracted spectra
+        self.counts = {}
         self.spectra = {}
 
     def caluclate_order_masks(self):
@@ -83,6 +84,17 @@ class SossObs:
         self.order_masks = lt.order_masks(self.median, save=True)
 
         print("New order masks calculated from median image.")
+
+    def _counts_to_flux(self, counts):
+        """
+        Convert the given count rate to a flux density
+
+        Parameters
+        ----------
+        counts: array-like
+            The count rate as a function of wavelength
+        """
+        pass
 
     def extract(self, method="sum", **kwargs):
         """
@@ -100,13 +112,19 @@ class SossObs:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         if method == "bin":
-             self.spectra[method] = bn.extract(self.data, **kwargs)
+            # Run the extraction method
+             self.wavelength, self.counts[method] = bn.extract(self.data, **kwargs)
 
         if method == "reconstruct":
-            self.spectra[method] = rc.extract(self.data, **kwargs)
+            # Run the extraction method
+            self.wavelength, self.counts[method] = rc.extract(self.data, **kwargs)
 
         if method == "sum":
-            self.spectra[method] = sm.extract(self.data, **kwargs)
+            # Run the extraction method
+            self.wavelength, self.counts[method] = sm.extract(self.data, self.wavecal, **kwargs)
+
+            # Convert to flux
+            self.spectra[method] = self._counts_to_flux(self.counts[method])
 
     def _get_frame(self, idx=None):
         """
@@ -203,9 +221,14 @@ class SossObs:
             file = resource_filename('specialsoss', 'files/soss_wavelengths_fullframe.fits')
 
         # Pull out the full frame data and trim for appropriate subarray
-        start = 0 if self.subarray == 'FULL' else 1792
-        end = 1888 if self.subarray == 'SUBSTRIP96' else 2048
-        self.wavecal = fits.getdata(file).swapaxes(-2, -1)[:, start:end]
+        # start = 0 if self.subarray == 'FULL' else 1792
+        # end = 1888 if self.subarray == 'SUBSTRIP96' else 2048
+        # self.wavecal = fits.getdata(file).swapaxes(-2, -1)[:, :, start:end]
+        end = 2048 if self.subarray == 'FULL' else 256
+        start = 160 if self.subarray == 'SUBSTRIP96' else 0
+        wave = fits.getdata(file).swapaxes(1, 2)[:, start:end, :]
+        wave[wave == 0] = np.nan
+        self.wavecal = wave
 
     def plot_frame(self, idx=None, scale='log', draw=True):
         """
@@ -244,13 +267,28 @@ class SossObs:
         # Get the data
         frame = self._get_frame(idx)
 
-        # Plot the slice anf frame
+        # Plot the slice and frame
         fig = plt.plot_slice(frame, col, idx=0, **kwargs)
 
         if draw:
             show(fig)
         else:
             return fig
+
+    def plot_spectrum(self, idx=0, methods=['sum', 'bin', ''], draw=True):
+        """
+        Plot the extracted 1D spectrum
+
+        Parameters
+        ----------
+        idx: int
+            The frame index to plot
+        """
+        # Get the data
+        counts = 
+
+        # Draw the figure
+        fig = plt.plot_spectrum()
 
     def plot_ramp(self, draw=True):
         """
