@@ -2,10 +2,11 @@
 
 """A module for the 1D spectral extraction summation method"""
 
+from hotsoss import utils 
 import numpy as np
 
 
-def extract(data, wavemap, **kwargs):
+def extract(data, wavecal, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
@@ -18,10 +19,16 @@ def extract(data, wavemap, **kwargs):
 
     Returns
     -------
-    tuple
-        The wavelength array and time-series 1D spectra
+    dict
+        The wavelength array and time-series 1D counts and spectra
     """
     # Calculate the mean wavelength for the first order
-    wavelength = np.nanmean(wavemap[0], axis=0)
+    wavelength = np.nanmean(wavecal[0], axis=0)
 
-    return wavelength, np.nansum(data, axis=2)
+    # Get total counts in each pixel column
+    counts = np.nansum(data, axis=2)
+
+    # Convert to flux using first order response
+    flux = utils.counts_to_flux(counts, order=1)
+
+    return {'wavelength': wavelength, 'counts': counts, 'flux': flux}

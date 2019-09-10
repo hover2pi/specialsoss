@@ -9,28 +9,17 @@ from pkg_resources import resource_filename
 import os
 
 from astropy.io import fits
+from astropy import table as at
 from bokeh.plotting import figure, show
 from bokeh.transform import linear_cmap, log_cmap
 from hotsoss import plotting as plt
+from hotsoss import utils
+from hotsoss import locate_trace as lt
 import numpy as np
 
-from . import crossdispersion as xdisp
-from . import locate_trace as lt
 from . import reconstruction as rc
 from . import summation as sm
 from . import binning as bn
-
-
-def extract_flux(frame, coeffs=[lt.trace_polynomial(1), lt.trace_polynomial(2)], ):
-    """
-    Extract all spectral orders from a given frame
-
-    Parameters
-    ----------
-    frame: array-like
-        The 2D frame to extract a spectrum from
-    """
-    pass
 
 
 class SossObs:
@@ -72,29 +61,42 @@ class SossObs:
         self.load_wavebins()
 
         # Placeholder for the extracted spectra
-        self.counts = {}
-        self.spectra = {}
+        cols = ('wavelength', 'counts', 'spectrum', 'method')
+        dtypes = ('O', 'O', 'O', 'S12')
+        self.extracted = at.Table(names=cols, dtype=dtypes)
 
     def caluclate_order_masks(self):
         """
         Calculate the order masks from the median image
-
         """
         # Find the trace in all columns
         self.order_masks = lt.order_masks(self.median, save=True)
 
         print("New order masks calculated from median image.")
 
-    def _counts_to_flux(self, counts):
-        """
-        Convert the given count rate to a flux density
-
-        Parameters
-        ----------
-        counts: array-like
-            The count rate as a function of wavelength
-        """
-        pass
+    # def _counts_to_flux(self, wavelength, counts):
+    #     """
+    #     Convert the given count rate to a flux density
+    #
+    #     Parameters
+    #     ----------
+    #     wavelength: array-like
+    #         The wavelength array
+    #     counts: array-like
+    #         The count rate as a function of wavelength
+    #     """
+    #     # Get the response for this order
+    #
+    #
+    #
+    #     # Get extracted spectrum (Column sum for now)
+    #     wave = np.mean(self.wave[0], axis=0)
+    #     flux_out = np.sum(tso.reshape(self.dims3)[frame].data, axis=0)
+    #     response = 1./self.order1_response
+    #
+    #     # Convert response in [mJy/ADU/s] to [Flam/ADU/s] then invert so
+    #     # that we can convert the flux at each wavelegth into [ADU/s]
+    #     flux_out *= response/self.time[np.mod(self.ngrps, frame)]
 
     def extract(self, method="sum", **kwargs):
         """
@@ -104,27 +106,25 @@ class SossObs:
         Parameters
         ----------
         method: str
-            The method to use, ['reconstruct', 'wavebins']
+            The extraction method to use, ["reconstruct", "bin", "sum"]
         """
         # Validate the method
         valid_methods = ["reconstruct", "bin", "sum"]
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
-        if method == "bin":
-            # Run the extraction method
-             self.wavelength, self.counts[method] = bn.extract(self.data, **kwargs)
+        # Make an entry dict
+        entry = {'method': method}
 
-        if method == "reconstruct":
-            # Run the extraction method
-            self.wavelength, self.counts[method] = rc.extract(self.data, **kwargs)
+        # Set the extraction function
+        func = bn.extract if method == "bin" else sm.extract if method == "sum" else rc.extract
 
-        if method == "sum":
-            # Run the extraction method
-            self.wavelength, self.counts[method] = sm.extract(self.data, self.wavecal, **kwargs)
+        # Run the extraction method, returning a dict
+        # with keys ['counts', 'wavelength', 'flux']
+        result = func(self.data, self.wavecal, **kwargs)
 
-            # Convert to flux
-            self.spectra[method] = self._counts_to_flux(self.counts[method])
+        # Add the results to the table
+        self.extracted.add_row(result)
 
     def _get_frame(self, idx=None):
         """
@@ -214,23 +214,40 @@ class SossObs:
         Parameters
         ----------
         file: str (optional)
-            The path to the wavelength calibration file
+            The path to a custom wavelength calibration file
         """
-        # Load default if None
-        if file is None:
-            file = resource_filename('specialsoss', 'files/soss_wavelengths_fullframe.fits')
+        # Load wavelength calibration file
+        self.wavecal = utils.wave_solutions(subarr=self.subarray, file=file)
 
         # Pull out the full frame data and trim for appropriate subarray
-        # start = 0 if self.subarray == 'FULL' else 1792
-        # end = 1888 if self.subarray == 'SUBSTRIP96' else 2048
-        # self.wavecal = fits.getdata(file).swapaxes(-2, -1)[:, :, start:end]
-        end = 2048 if self.subarray == 'FULL' else 256
-        start = 160 if self.subarray == 'SUBSTRIP96' else 0
-        wave = fits.getdata(file).swapaxes(1, 2)[:, start:end, :]
-        wave[wave == 0] = np.nan
-        self.wavecal = wave
+        # end = 2048 if self.subarray == 'FULL' else 256
+        # start = 160 if self.subarray == 'SUBSTRIP96' else 0
+        # wave = fits.getdata(file).swapaxes(1, 2)[:, start:end, :]
+        # wave[wave == 0] = np.nan
+        # self.wavecal = wave
 
-    def plot_frame(self, idx=None, scale='log', draw=True):
+    @staticmethod
+    def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files/calwebb_tso1.cfg'), outdir=None):
+        """
+        Run the file through the JWST pipeline, storing the data and header
+        """
+        # Check for the pipeline
+        try:
+
+            if outdir is None:
+                outdir = os.path.dirname(uncal_file)
+
+            # Run the pipeline
+            from jwst.pipeline import Detector1Pipeline
+            tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=configdir, output_dir=outdir)
+            processed = uncal_file.replace('.fits', '_ramp.fits')
+
+            return processed
+
+        except ImportError:
+            print("Could not import JWST pipeline. {} has not been processed.".format(file))
+
+    def plot_frame(self, idx=None, scale='linear', draw=True):
         """
         Plot a single frame of the data
 
@@ -275,7 +292,7 @@ class SossObs:
         else:
             return fig
 
-    def plot_spectrum(self, idx=0, methods=['sum', 'bin', ''], draw=True):
+    def plot_spectrum(self, idx=0, methods=['sum', 'bin', 'reconstruct'], draw=True):
         """
         Plot the extracted 1D spectrum
 
@@ -284,11 +301,21 @@ class SossObs:
         idx: int
             The frame index to plot
         """
-        # Get the data
-        counts = 
+        for method in methods:
 
-        # Draw the figure
-        fig = plt.plot_spectrum()
+            if method not in self.spectra:
+                print("'{}' method not used for extraction. Skipping.".format(method))
+
+            # Get the data
+            spectrum = self.spectra[method]
+
+            # Draw the figure
+            fig = plt.plot_spectrum(spectrum)
+
+        if draw:
+            show(fig)
+        else:
+            return fig
 
     def plot_ramp(self, draw=True):
         """
@@ -300,27 +327,6 @@ class SossObs:
             show(fig)
         else:
             return fig
-
-    @staticmethod
-    def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files/calwebb_tso1.cfg'), outdir=None):
-        """
-        Run the file through the JWST pipeline, storing the data and header
-        """
-        # Check for the pipeline
-        try:
-
-            if outdir is None:
-                outdir = os.path.dirname(uncal_file)
-
-            # Run the pipeline
-            from jwst.pipeline import Detector1Pipeline
-            tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=configdir, output_dir=outdir)
-            processed = uncal_file.replace('.fits', '_ramp.fits')
-
-            return processed
-
-        except ImportError:
-            print("Could not import JWST pipeline. {} has not been processed.".format(file))
 
 
 class RealObs(SossObs):
@@ -342,12 +348,15 @@ class SimObs(SossObs):
     """
     A test instance with the data preloaded
     """
-    def __init__(self, **kwargs):
+    def __init__(self, calibrate=False, **kwargs):
         """
         Initialize the object
         """
+        # To calibrate or not to calibrate
+        ext = 'ramp' if calibrate else 'uncal'
+
         # Get the file
-        file = resource_filename('specialsoss', 'files/SOSS256_sim.fits')
+        file = resource_filename('specialsoss', 'files/SOSS256_sim_{}.fits'.format(ext))
 
         # Inherit from SossObs
-        super().__init__(file, name='Simulated Observation', **kwargs)
+        super().__init__(file, name='Simulated Observation', calibrate=False, **kwargs)
