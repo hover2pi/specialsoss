@@ -121,7 +121,7 @@ class SossObs:
 
         # Run the extraction method, returning a dict
         # with keys ['counts', 'wavelength', 'flux']
-        result = func(self.data, self.wavecal, **kwargs)
+        result = func(self.data, **kwargs)
 
         # Add the results to the table
         self.extracted.add_row(result)
@@ -217,7 +217,7 @@ class SossObs:
             The path to a custom wavelength calibration file
         """
         # Load wavelength calibration file
-        self.wavecal = utils.wave_solutions(subarr=self.subarray, file=file)
+        self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
 
         # Pull out the full frame data and trim for appropriate subarray
         # end = 2048 if self.subarray == 'FULL' else 256
@@ -263,7 +263,7 @@ class SossObs:
         c1 = lt.trace_polynomial(1)
         c2 = lt.trace_polynomial(2)
         title = 'Frame {}'.format(idx) if idx is not None else 'Median'
-        fig = plt.plot_frame(frame, scale=scale, trace_coeffs=(c1, c2), title=title)
+        fig = plt.plot_frame(frame, scale=scale, trace_coeffs=(c1, c2), wavecal=self.wavecal, title=title)
 
         if draw:
             show(fig)
@@ -285,7 +285,7 @@ class SossObs:
         frame = self._get_frame(idx)
 
         # Plot the slice and frame
-        fig = plt.plot_slice(frame, col, idx=0, **kwargs)
+        fig = plt.plot_slice(frame, col, idx=0, wavecal=self.wavecal, **kwargs)
 
         if draw:
             show(fig)
@@ -348,7 +348,7 @@ class SimObs(SossObs):
     """
     A test instance with the data preloaded
     """
-    def __init__(self, calibrate=False, **kwargs):
+    def __init__(self, calibrate=True, **kwargs):
         """
         Initialize the object
         """

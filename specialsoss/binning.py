@@ -10,4 +10,4 @@ from bokeh.plotting import figure, show
 import numpy as np
 from pkg_resources import resource_filename
 
-from . import locate_trace as lt
+from hotsoss import locate_trace as lt

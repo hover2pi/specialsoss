@@ -12,7 +12,7 @@ import lmfit
 import numpy as np
 from pkg_resources import resource_filename
 
-from . import locate_trace as lt
+from hotsoss import locate_trace as lt
 
 
 # wave, flux, *_ = np.genfromtxt('/Users/jfilippazzo/Dropbox/BDNYC_spectra/SpeX/Prism/LHS132.txt', unpack=True)
