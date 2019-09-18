@@ -55,15 +55,12 @@ class SossObs:
         # Load the file
         self.load_file(self.filepath)
 
-        # Load the wavelength calibration and throughput curves
+        # Load the wavelength calibration file
         self.load_filters()
         self.load_wavecal()
-        self.load_wavebins()
 
-        # Placeholder for the extracted spectra
-        cols = ('wavelength', 'counts', 'spectrum', 'method')
-        dtypes = ('O', 'O', 'O', 'S12')
-        self.extracted = at.Table(names=cols, dtype=dtypes)
+        # Dictionary for the extracted spectra
+        self.extracted = {}
 
     def caluclate_order_masks(self):
         """
@@ -74,31 +71,7 @@ class SossObs:
 
         print("New order masks calculated from median image.")
 
-    # def _counts_to_flux(self, wavelength, counts):
-    #     """
-    #     Convert the given count rate to a flux density
-    #
-    #     Parameters
-    #     ----------
-    #     wavelength: array-like
-    #         The wavelength array
-    #     counts: array-like
-    #         The count rate as a function of wavelength
-    #     """
-    #     # Get the response for this order
-    #
-    #
-    #
-    #     # Get extracted spectrum (Column sum for now)
-    #     wave = np.mean(self.wave[0], axis=0)
-    #     flux_out = np.sum(tso.reshape(self.dims3)[frame].data, axis=0)
-    #     response = 1./self.order1_response
-    #
-    #     # Convert response in [mJy/ADU/s] to [Flam/ADU/s] then invert so
-    #     # that we can convert the flux at each wavelegth into [ADU/s]
-    #     flux_out *= response/self.time[np.mod(self.ngrps, frame)]
-
-    def extract(self, method="sum", **kwargs):
+    def extract(self, method="sum", name=None, **kwargs):
         """
         Extract the 1D spectra from the time series data
         using the specified method
@@ -113,18 +86,17 @@ class SossObs:
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
-        # Make an entry dict
-        entry = {'method': method}
-
         # Set the extraction function
         func = bn.extract if method == "bin" else sm.extract if method == "sum" else rc.extract
 
-        # Run the extraction method, returning a dict
-        # with keys ['counts', 'wavelength', 'flux']
-        result = func(self.data, **kwargs)
+        # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
+        result = func(self.data, subarray=self.subarray, **kwargs)
+        result['method'] = method
 
         # Add the results to the table
-        self.extracted.add_row(result)
+        if name is None:
+            name = method
+        self.extracted[name] = result
 
     def _get_frame(self, idx=None):
         """
@@ -137,7 +109,10 @@ class SossObs:
         """
         if isinstance(idx, int):
             dim = self.data.shape
-            frame = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])[idx]
+            if self.data.ndim == 4:
+                frame = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])[idx]
+            else:
+                frame = self.data[idx]
         else:
             frame = self.median
 
@@ -197,15 +172,9 @@ class SossObs:
 
         # Pull out the throughput for the appropriate order
         for ord in [1, 2, 3]:
-            file = resource_filename('specialsoss', 'files/GR700XD_{}.txt'.format(ord))
+            file = resource_filename('hotsoss', 'files/GR700XD_{}.txt'.format(ord))
             if os.path.isfile(file):
                 self.filters.append(np.genfromtxt(file, unpack=True))
-
-    def load_wavebins(self):
-        """
-        Load the wavelength bins for signal extraction
-        """
-        self.wavebins = lt.wavelength_bins()
 
     def load_wavecal(self, file=None):
         """
@@ -218,13 +187,6 @@ class SossObs:
         """
         # Load wavelength calibration file
         self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
-
-        # Pull out the full frame data and trim for appropriate subarray
-        # end = 2048 if self.subarray == 'FULL' else 256
-        # start = 160 if self.subarray == 'SUBSTRIP96' else 0
-        # wave = fits.getdata(file).swapaxes(1, 2)[:, start:end, :]
-        # wave[wave == 0] = np.nan
-        # self.wavecal = wave
 
     @staticmethod
     def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files/calwebb_tso1.cfg'), outdir=None):
@@ -247,7 +209,7 @@ class SossObs:
         except ImportError:
             print("Could not import JWST pipeline. {} has not been processed.".format(file))
 
-    def plot_frame(self, idx=None, scale='linear', draw=True):
+    def plot_frame(self, idx=None, scale='linear', draw=True, **kwargs):
         """
         Plot a single frame of the data
 
@@ -260,15 +222,33 @@ class SossObs:
         frame = self._get_frame(idx)
 
         # Make the figure
-        c1 = lt.trace_polynomial(1)
-        c2 = lt.trace_polynomial(2)
-        title = 'Frame {}'.format(idx) if idx is not None else 'Median'
-        fig = plt.plot_frame(frame, scale=scale, trace_coeffs=(c1, c2), wavecal=self.wavecal, title=title)
+        title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
+        coeffs = lt.trace_polynomial()
+        fig = plt.plot_frame(frame, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         if draw:
             show(fig)
         else:
             return fig
+
+    # def plot_frames(self, idx=0, scale='linear', draw=True, **kwargs):
+    #     """
+    #     Plot a single frame of the data
+    #
+    #     Parameters
+    #     ----------
+    #     idx: int
+    #         The index of the frame to plot
+    #     """
+    #     # Make the figure
+    #     title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
+    #     coeffs = lt.trace_polynomial()
+    #     fig = plt.plot_frames(self.data, idx=idx, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
+    #
+    #     if draw:
+    #         show(fig)
+    #     else:
+    #         return fig
 
     def plot_slice(self, col, idx=None, draw=True, **kwargs):
         """
@@ -285,14 +265,16 @@ class SossObs:
         frame = self._get_frame(idx)
 
         # Plot the slice and frame
-        fig = plt.plot_slice(frame, col, idx=0, wavecal=self.wavecal, **kwargs)
+        title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
+        coeffs = lt.trace_polynomial()
+        fig = plt.plot_slice(frame, col, idx=0, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         if draw:
             show(fig)
         else:
             return fig
 
-    def plot_spectrum(self, idx=0, methods=['sum', 'bin', 'reconstruct'], draw=True):
+    def plot_spectra(self, idx=0, dtype='flux', names=None, order=None, draw=True):
         """
         Plot the extracted 1D spectrum
 
@@ -300,22 +282,60 @@ class SossObs:
         ----------
         idx: int
             The frame index to plot
+        dtype: str
+            The data to plot, ['flux', 'counts']
+        names: seqence (optional)
+            The names of the extracted spectra to plot
+        order: int (optional)
+            The order to plot
         """
-        for method in methods:
+        # Get colors palette
+        colors = utils.COLORS
 
-            if method not in self.spectra:
-                print("'{}' method not used for extraction. Skipping.".format(method))
-
-            # Get the data
-            spectrum = self.spectra[method]
-
-            # Draw the figure
-            fig = plt.plot_spectrum(spectrum)
-
-        if draw:
-            show(fig)
+        # Select the orders
+        if isinstance(order, int):
+            orders = [order]
         else:
-            return fig
+            orders = [1, 2]
+
+        if dtype == 'counts':
+            ylabel = 'Counts [ADU/s]'
+        else:
+            ylabel = 'Flux Density [erg/s/cm2/A]'
+
+        # Select the extractions
+        fig = None
+        if names is None:
+            names = self.extracted.keys()
+
+        for name in names:
+
+            if name not in self.extracted:
+                print("'{}' method not used for extraction. Skipping.".format(name))
+
+            else:
+
+                # Get the data dictionary and color
+                result = self.extracted[name]
+                color = next(colors)
+
+                # Draw the figure
+                for filt in ['CLEAR', 'F277W']:
+                    if filt in result:
+                        for order in orders:
+                            key = 'order{}'.format(order)
+                            if key in result[filt]:
+                                legend = ' - '.join([filt, key, name])
+                                data = result[filt][key][dtype]
+                                wave = result[filt][key]['wavelength']
+                                flux = data[idx]
+                                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
+
+        if fig is not None:
+            if draw:
+                show(fig)
+            else:
+                return fig
 
     def plot_ramp(self, draw=True):
         """
