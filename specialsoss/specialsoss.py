@@ -17,14 +17,15 @@ from hotsoss import utils
 from hotsoss import locate_trace as lt
 import numpy as np
 
+from . import decontaminate as dec
 from . import reconstruction as rc
 from . import summation as sm
 from . import binning as bn
 
 
-class SossObs:
+class SossExposure(object):
     """
-    A class object to extract and manipulate SOSS spectra
+    A class object to load a SOSS exposure file and extract and manipulate spectra
     """
     def __init__(self, filepath, name='My SOSS Observations', calibrate=True, **kwargs):
         """
@@ -70,6 +71,39 @@ class SossObs:
         self.order_masks = lt.order_masks(self.median, save=True)
 
         print("New order masks calculated from median image.")
+
+    def decontaminate(self, f277w_exposure):
+        """
+        Decontaminate the GR700XD+CLEAR orders with GR700XD+F277W order 1
+
+        Parameters
+        ----------
+        f277w_exposure: SossExposure
+            The F277W exposure object
+        """
+        # Check that the current filter is CLEAR
+        if not self.filter == 'CLEAR':
+            raise ValueError("filter = {}: Only a CLEAR exposure can be decontaminated".format(self.filter))
+
+        # Check the dtype
+        if not isinstance(f277w_exposure, type(self)):
+            raise TypeError("{}: f277w_exposure must be of type {}".format(type(f277w_exposure), type(self)))
+
+        # Check that the new filter is F277W
+        new_filt = f277w_exposure.filter
+        if new_filt != 'F277W':
+            raise ValueError("filter = {}: Only an F277W exposure can be used for decontamination".format(new_filt))
+
+        # Check that spectral extraction has been run on the CLEAR exposure
+        if not bool(self.extracted):
+            raise ValueError("Please run 'extract' method on CLEAR exposure before decontamination")
+
+        # Check that spectral extraction has been run on the F277W exposure
+        if not bool(f277w_exposure.extracted):
+            raise ValueError("Please run 'extract' method on F277W exposure before decontamination")
+
+        # Run the decontamination
+        self.extracted = dec.decontaminate(self.extracted, f277w_exposure.extracted)
 
     def extract(self, method="sum", name=None, **kwargs):
         """
@@ -349,7 +383,7 @@ class SossObs:
             return fig
 
 
-class RealObs(SossObs):
+class RealExposure(SossExposure):
     """
     A test instance with CV3 data loaded
     """
@@ -358,17 +392,17 @@ class RealObs(SossObs):
         Initialize the object
         """
         # Get the file
-        file = resource_filename('specialsoss', 'files/SOSS256_CV3.fits')
+        file = resource_filename('specialsoss', 'files/SUBSTRIP256_CV3.fits')
 
         # Inherit from SossObs
         super().__init__(file, name='CV3 Observation', **kwargs)
 
 
-class SimObs(SossObs):
+class SimExposure(SossExposure):
     """
     A test instance with the data preloaded
     """
-    def __init__(self, calibrate=True, **kwargs):
+    def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', calibrate=True, **kwargs):
         """
         Initialize the object
         """
@@ -376,7 +410,7 @@ class SimObs(SossObs):
         ext = 'ramp' if calibrate else 'uncal'
 
         # Get the file
-        file = resource_filename('specialsoss', 'files/SOSS256_sim_{}.fits'.format(ext))
+        file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, ext))
 
         # Inherit from SossObs
         super().__init__(file, name='Simulated Observation', calibrate=False, **kwargs)
