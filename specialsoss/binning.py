@@ -95,7 +95,7 @@ def bin_counts(data, wavebins, pixel_mask=None):
         data = data.reshape((data.shape[0]*data.shape[1], data.shape[2], data.shape[3]))
 
     # Array to store counts
-    counts = np.zeros((data.shape[0], len(wavebins)))
+    counts = np.zeros((data.shape[0], len(wavebins)), dtype=float)
 
     # Apply the pixel mask by multiplying non-signal pixels by 0 before adding
     if isinstance(pixel_mask, np.ndarray) and pixel_mask.shape == data.shape[1:]:

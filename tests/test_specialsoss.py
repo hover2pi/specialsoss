@@ -62,16 +62,3 @@ class TestSimObs(unittest.TestCase):
         """Test that the test object loads properly"""
         obs = specialsoss.SimObs()
         self.assertEqual(obs.name, 'Simulated Observation')
-
-
-"""CV3 data not in pipeline compatible format so tests fail"""
-# class TestRealObs(unittest.TestCase):
-#     """Test TestObs object"""
-#     def setUp(self):
-#         """Test instance setup"""
-#         pass
-#
-#     def test_init(self):
-#         """Test that the test object loads properly"""
-#         obs = specialsoss.RealObs()
-#         self.assertEqual(obs.name, 'CV3 Observation')

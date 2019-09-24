@@ -14,15 +14,3 @@ install:
 script:
   - python -m pytest --cov tests/
   - coveralls
-
-# deploy new versions to PyPI
-deploy:
-  provider: pypi
-  distributions: sdist bdist_wheel
-  user: hover2pi
-  password:
-    secure: B0b0th#dog123pypi
-  on:
-    tags: true
-    repo: hover2pi/specialsoss
-    python: 3.5
