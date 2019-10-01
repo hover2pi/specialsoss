@@ -80,6 +80,21 @@ class TestSossExposure(unittest.TestCase):
         # Run decontaminate
         clear.decontaminate(f277w)
 
+    def test_extract(self):
+        """Test the extract method"""
+        # Make CLEAR obs
+        clear = specialsoss.SossExposure(self.file, calibrate=False)
+
+        # Fail if bad etraction method
+        self.assertRaises(ValueError, clear.extract, 'FOO')
+
+        # Check extracted is empty
+        self.assertEqual(clear.extracted, {})
+
+        # Run and check extracted is populated
+        clear.extract('sum')
+        self.assertNotEqual(clear.extracted, {})
+
 
 class TestSimExposure(unittest.TestCase):
     """Test SimExposure object"""
