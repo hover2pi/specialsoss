@@ -13,52 +13,81 @@ import bokeh
 from specialsoss import specialsoss
 
 
-class TestSossObs(unittest.TestCase):
-    """Test SossObs object"""
+class TestSossExposure(unittest.TestCase):
+    """Test SossExposure object"""
     def setUp(self):
         """Test instance setup"""
         # Make Spectrum class for testing
-        self.file = resource_filename('specialsoss', 'files/SOSS256_sim.fits')
+        self.file = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_ramp.fits')
 
     def test_init(self):
         """Test that a purely photometric SED can be creted"""
         # Check name
-        obs = specialsoss.SossObs(self.file)
+        obs = specialsoss.SossExposure(self.file, calibrate=False)
         self.assertEqual(obs.name, 'My SOSS Observations')
 
         # Check data ingest
-        self.assertEqual(obs.datacube.shape, (5, 5, 256, 2048))
+        self.assertEqual(obs.data.shape, (2, 2, 256, 2048))
         self.assertEqual(obs.subarray, 'SUBSTRIP256')
         self.assertEqual(obs.filter, 'CLEAR')
-        self.assertEqual(obs.nints, 5)
-        self.assertEqual(obs.ngrps, 5)
+        self.assertEqual(obs.nints, 2)
+        self.assertEqual(obs.ngrps, 2)
         self.assertEqual(obs.nrows, 256)
         self.assertEqual(obs.ncols, 2048)
 
     def test_info(self):
         """Test the info property"""
-        obs = specialsoss.SossObs(self.file)
+        obs = specialsoss.SossExposure(self.file, calibrate=False)
         obs.info
 
     def test_plot(self):
         """Check the plotting works"""
-        obs = specialsoss.SossObs(self.file)
+        obs = specialsoss.SossExposure(self.file, calibrate=False)
         fig = obs.plot_frame(draw=False)
         self.assertEqual(str(type(fig)), "<class 'bokeh.plotting.figure.Figure'>")
 
     def test_wavecal(self):
         """Test loading wavecal file"""
-        obs = specialsoss.SossObs(self.file)
+        obs = specialsoss.SossExposure(self.file, calibrate=False)
         self.assertEqual(obs.wavecal.shape, (3, obs.nrows, obs.ncols))
 
+    def test_decontaminate(self):
+        """Test the decontaminate method works"""
+        # Make CLEAR obs
+        clear = specialsoss.SossExposure(self.file, calibrate=False)
 
-class TestSimObs(unittest.TestCase):
-    """Test TestObs object"""
+        # Make F277W obs
+        f277w = specialsoss.SossExposure(self.file, calibrate=False)
+        f277w.filter = 'F277W'
+
+        # Fail if obs2 is not SossExposure
+        self.assertRaises(TypeError, clear.decontaminate, 'FOO')
+
+        # Fail if obs2.filter is not F277W
+        self.assertRaises(ValueError, clear.decontaminate, clear)
+
+        # Fail if obs1.fiter is not CLEAR
+        self.assertRaises(ValueError, f277w.decontaminate, f277w)
+
+        # Fail if obs1 is not extracted
+        self.assertRaises(ValueError, clear.decontaminate, f277w)
+        clear.extract('sum')
+
+        # Fail if obs2 is not extracted
+        self.assertRaises(ValueError, clear.decontaminate, f277w)
+        f277w.extract('sum')
+
+        # Run decontaminate
+        clear.decontaminate(f277w)
+
+
+class TestSimExposure(unittest.TestCase):
+    """Test SimExposure object"""
     def setUp(self):
         """Test instance setup"""
         pass
 
     def test_init(self):
         """Test that the test object loads properly"""
-        obs = specialsoss.SimObs()
+        obs = specialsoss.SimExposure()
         self.assertEqual(obs.name, 'Simulated Observation')
