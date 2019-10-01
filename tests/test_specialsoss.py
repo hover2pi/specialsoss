@@ -40,6 +40,19 @@ class TestSossExposure(unittest.TestCase):
         obs = specialsoss.SossExposure(self.file, calibrate=False)
         obs.info
 
+    def test_get_frame(self):
+        """Test the _get_frame hidden method"""
+        # Make CLEAR obs
+        clear = specialsoss.SossExposure(self.file, calibrate=False)
+
+        # with idx
+        dat = clear._get_frame(idx=0)
+        self.assertEqual(np.sum(dat), np.sum(clear.data[0][0]))
+
+        # withoug idx, get median
+        dat = clear._get_frame()
+        self.assertEqual(np.sum(dat), np.sum(clear.median))
+
     def test_plot(self):
         """Check the plotting works"""
         obs = specialsoss.SossExposure(self.file, calibrate=False)
