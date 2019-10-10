@@ -108,6 +108,24 @@ class TestSossExposure(unittest.TestCase):
         clear.extract('sum')
         self.assertNotEqual(clear.extracted, {})
 
+    def test_plots(self):
+        """Test the plots work"""
+        # Make CLEAR obs
+        clear = specialsoss.SossExposure(self.file, calibrate=False)
+
+        # Test plot_frame
+        fig = clear.plot_frame(draw=False)
+
+        # Test plot_ramp
+        fig = clear.plot_ramp(draw=False)
+
+        # Test plot_slice
+        fig = clear.plot_slice(col=500, draw=False)
+
+        # Test plot_spectra
+        fig = clear.plot_spectra(dtype='flux', draw=False)
+        fig = clear.plot_spectra(dtype='counts', draw=False)
+
 
 class TestSimExposure(unittest.TestCase):
     """Test SimExposure object"""

@@ -24,7 +24,7 @@ specialsoss
 SPECtral Image AnaLysis for SOSS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Authors: Joe Filippazzo, Kevin Stevenson
+Authors: Joe Filippazzo
 
 This pure Python 3.5+ package performs optimal spectral extraction routines
 for the Single Object Slitless Spectroscopy (SOSS) mode of the
@@ -43,24 +43,38 @@ Extracting Spectra from SOSS Observations
 
 The headers in JWST data products provide almost all the information
 needed to perform the spectral extraction, making the path to your data
-the only required input. To extract time series 1D spectra, simply do
+the only required input. To load your SOSS exposure, simply do
 
 .. code:: python
 
    # Imports
    import numpy as np
-   from specialsoss import SossObs
+   from specialsoss import SossExposure
    from pkg_resources import resource_filename
 
-   # Run the extraction
-   data = resource_filename('specialsoss', 'files/soss_example.fits')
-   obs = SossObs(data)
+   # Load the exposure
+   file = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_ramp.fits')
+   obs = SossExposure(file, calibrate=False)
 
-That’s it! Now we can take a look at the extracted time-series spectra:
+Now we can scroll through the ingested data by plotting the frames.
 
 .. code:: python
 
-   obs.plot()
+   obs.plot_frames()
 
-.. figure:: specialsoss/files/extracted_spectra.png
-   :alt: SOSS Extraction
+.. figure:: specialsoss/files/images/plot_frames.png
+   :alt: SOSS Frames
+
+To run a spectral extraction routine, use the `extract` method with
+the name of the routine you would like to use. In this example, we'll
+use the vanilla column sum extraction.
+
+.. code:: python
+
+   obs.extract('sum')
+
+Finally, we can see the extracted time-series spectra and the monochromatic lightcurves with:
+
+.. code:: python
+
+   obs.plot_time_series_spectra()

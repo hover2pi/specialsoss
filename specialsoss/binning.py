@@ -9,16 +9,16 @@ from hotsoss import utils
 from hotsoss import locate_trace as lt
 
 
-def extract(clear_data=None, f277w_data=None, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
+def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
     Parameters
     ----------
-    clear_data: array-like (optional)
-        The CLEAR+GR700XD datacube
-    f277w_data: array-like (optional)
-        The F277W+GR700XD datacube
+    data: array-like (optional)
+        The CLEAR+GR700XD or F277W+GR700XD datacube
+    filt: str
+        The name of the filter, ['CLEAR', 'F277W']
     pixel_masks: sequence
         The pixel masks for each order
     subarray: str
@@ -31,10 +31,6 @@ def extract(clear_data=None, f277w_data=None, pixel_masks=None, subarray='SUBSTR
     dict
         The wavelength array and time-series 1D counts and spectra
     """
-    if clear_data is None and f277w_data is None:
-        print("Please provide clear_data or f277w_data to perform extraction")
-        return
-
     # Dictionary for results
     results = {}
 
@@ -42,32 +38,25 @@ def extract(clear_data=None, f277w_data=None, pixel_masks=None, subarray='SUBSTR
     wavelengths = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray='SUBSTRIP256')
     wavebins = lt.wavelength_bins(subarray=subarray)
 
-    # Extract the spectra for each filter and order
-    for filt, data in zip(['CLEAR', 'F277W'], [clear_data, f277w_data]):
-        if data is not None:
+    # Load the pixel masks
+    if pixel_masks is None:
+        pixel_masks = np.ones((2, data.shape[-2], data.shape[-1]))
 
-            # Make dictonary for the filter
-            results[filt] = {}
+    # Extract each order
+    for n, (wavelength, wavebin, mask) in enumerate(zip(wavelengths, wavebins, pixel_masks)):
 
-            # Load the pixel masks
-            if pixel_masks is None:
-                pixel_masks = np.ones((2, data.shape[-2], data.shape[-1]))
+        # Results
+        name = 'order{}'.format(n+1)
+        result = {'wavelength': wavelength, 'filter': filt, 'subarray': subarray}
 
-            # Extract each order
-            for n, (wavelength, wavebin, mask) in enumerate(zip(wavelengths, wavebins, pixel_masks)):
+        # Bin the counts
+        result['counts'] = bin_counts(data, wavebin, mask)
 
-                # Results
-                name = 'order{}'.format(n+1)
-                result = {'wavelength': wavelength, 'filter': filt, 'subarray': subarray}
+        # Convert to flux
+        result['flux'] = utils.counts_to_flux(wavelength, result['counts'], filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
 
-                # Bin the counts
-                result['counts'] = bin_counts(data, wavebin, mask)
-
-                # Convert to flux
-                result['flux'] = utils.counts_to_flux(wavelength, result['counts'], filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
-
-                # Add result to the dictionary
-                results[filt][name] = result
+        # Add result to the dictionary
+        results[name] = result
 
     return results
 
