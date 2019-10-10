@@ -124,7 +124,7 @@ class SossExposure(object):
         func = bn.extract if method == "bin" else sm.extract if method == "sum" else rc.extract
 
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(self.data, subarray=self.subarray, **kwargs)
+        result = func(self.data, filt=self.filter, subarray=self.subarray, **kwargs)
         result['method'] = method
 
         # Add the results to the table
@@ -265,24 +265,28 @@ class SossExposure(object):
         else:
             return fig
 
-    # def plot_frames(self, idx=0, scale='linear', draw=True, **kwargs):
-    #     """
-    #     Plot a single frame of the data
-    #
-    #     Parameters
-    #     ----------
-    #     idx: int
-    #         The index of the frame to plot
-    #     """
-    #     # Make the figure
-    #     title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
-    #     coeffs = lt.trace_polynomial()
-    #     fig = plt.plot_frames(self.data, idx=idx, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
-    #
-    #     if draw:
-    #         show(fig)
-    #     else:
-    #         return fig
+    def plot_frames(self, idx=0, scale='linear', draw=True, **kwargs):
+        """
+        Plot a single frame of the data
+
+        Parameters
+        ----------
+        idx: int
+            The index of the frame to plot
+        """
+        # Reshape the data
+        dim = self.data.shape
+        data = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])
+
+        # Make the figure
+        title = '{}: Frames'.format(self.name)
+        coeffs = lt.trace_polynomial()
+        fig = plt.plot_frames(data, idx=idx, scale=scale, height=dim[2], trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
+
+        if draw:
+            show(fig)
+        else:
+            return fig
 
     def plot_slice(self, col, idx=None, draw=True, **kwargs):
         """
@@ -301,7 +305,7 @@ class SossExposure(object):
         # Plot the slice and frame
         title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
         coeffs = lt.trace_polynomial()
-        fig = plt.plot_slice(frame, col, idx=0, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
+        fig = plt.plot_slice(frame, col, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         if draw:
             show(fig)
@@ -354,16 +358,14 @@ class SossExposure(object):
                 color = next(colors)
 
                 # Draw the figure
-                for filt in ['CLEAR', 'F277W']:
-                    if filt in result:
-                        for order in orders:
-                            key = 'order{}'.format(order)
-                            if key in result[filt]:
-                                legend = ' - '.join([filt, key, name])
-                                data = result[filt][key][dtype]
-                                wave = result[filt][key]['wavelength']
-                                flux = data[idx]
-                                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
+                for order in orders:
+                    key = 'order{}'.format(order)
+                    if key in result:
+                        legend = ' - '.join([key, name])
+                        data = result[key][dtype]
+                        wave = result[key]['wavelength']
+                        flux = data[idx]
+                        fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
 
         if fig is not None:
             if draw:
