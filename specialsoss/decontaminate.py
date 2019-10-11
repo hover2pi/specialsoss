@@ -18,20 +18,21 @@ def decontaminate(clear_data, f277w_data):
     f277w_data: np.ndarray
         The GR700XD+F277W datacube
     """
-    # Dict for decontaminated spctra
-    decontaminated = {}
+    return clear_data
 
-    # Make sure the same extraction methods were used
-    for name in clear_data.keys():
-        if name in f277w_data.keys():
-
-            # Get the data for each filter and order
-            clear_ord1 = clear_data[name].get('order1')
-            clear_ord2 = clear_data[name].get('order2')
-            f277w_ord1 = f277w_data[name].get('order1')
-
-            # Corrected order 1 spectrum
-            corrected = copy()
-
-            # Correct as much contamination with the F277W spectrum as possible
-            
+    # # Dict for decontaminated spctra
+    # decontaminated = {}
+    #
+    # # Make sure the same extraction methods were used
+    # for name in clear_data.keys():
+    #     if name in f277w_data.keys():
+    #
+    #         # Get the data for each filter and order
+    #         clear_ord1 = clear_data[name].get('order1')
+    #         clear_ord2 = clear_data[name].get('order2')
+    #         f277w_ord1 = f277w_data[name].get('order1')
+    #
+    #         # Corrected order 1 spectrum
+    #         # corrected = copy()
+    #
+    #         # Correct as much contamination with the F277W spectrum as possible
