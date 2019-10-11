@@ -4,16 +4,19 @@
 
 import copy
 
-from awesimsoss import TSO, make_trace as mt
+# from awesimsoss import TSO, make_trace as mt
 from astropy.io import fits
 import astropy.units as q
 from bokeh.plotting import figure, show
-import lmfit
+# import lmfit
 import numpy as np
 from pkg_resources import resource_filename
 
 from hotsoss import locate_trace as lt
 
+
+def extract():
+    pass
 
 # wave, flux, *_ = np.genfromtxt('/Users/jfilippazzo/Dropbox/BDNYC_spectra/SpeX/Prism/LHS132.txt', unpack=True)
 # scales = {'w{}'.format(n): v for n, v in enumerate(flux)}
