@@ -281,7 +281,7 @@ class SossExposure(object):
         # Make the figure
         title = '{}: Frames'.format(self.name)
         coeffs = lt.trace_polynomial()
-        fig = plt.plot_frames(data, idx=idx, scale=scale, height=dim[2], trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
+        fig = plt.plot_frames(data, idx=idx, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         if draw:
             show(fig)
