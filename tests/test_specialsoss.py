@@ -53,12 +53,6 @@ class TestSossExposure(unittest.TestCase):
         dat = clear._get_frame()
         self.assertEqual(np.sum(dat), np.sum(clear.median))
 
-    def test_plot(self):
-        """Check the plotting works"""
-        obs = specialsoss.SossExposure(self.file, calibrate=False)
-        fig = obs.plot_frame(draw=False)
-        self.assertEqual(str(type(fig)), "<class 'bokeh.plotting.figure.Figure'>")
-
     def test_wavecal(self):
         """Test loading wavecal file"""
         obs = specialsoss.SossExposure(self.file, calibrate=False)
@@ -116,11 +110,11 @@ class TestSossExposure(unittest.TestCase):
         # Test plot_frame
         fig = clear.plot_frame(draw=False)
 
+        # Test plot_frames
+        fig = clear.plot_frames(draw=False)
+
         # Test plot_ramp
         fig = clear.plot_ramp(draw=False)
-
-        # Test plot_slice
-        fig = clear.plot_slice(col=500, draw=False)
 
         # Test plot_spectra
         fig = clear.plot_spectra(dtype='flux', draw=False)

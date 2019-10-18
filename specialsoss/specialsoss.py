@@ -288,30 +288,6 @@ class SossExposure(object):
         else:
             return fig
 
-    def plot_slice(self, col, idx=None, draw=True, **kwargs):
-        """
-        Plot a column of a frame to see the PSF in the cross dispersion direction
-
-        Parameters
-        ----------
-        col: int, sequence
-            The column index(es) to plot
-        idx: int
-            The frame index to plot
-        """
-        # Get the data
-        frame = self._get_frame(idx)
-
-        # Plot the slice and frame
-        title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
-        coeffs = lt.trace_polynomial()
-        fig = plt.plot_slice(frame, col, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
-
-        if draw:
-            show(fig)
-        else:
-            return fig
-
     def plot_spectra(self, idx=0, dtype='flux', names=None, order=None, draw=True):
         """
         Plot the extracted 1D spectrum
