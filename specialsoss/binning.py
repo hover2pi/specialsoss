@@ -4,9 +4,10 @@
 
 import astropy.units as q
 import numpy as np
-
 from hotsoss import utils
 from hotsoss import locate_trace as lt
+
+from .utilities import combine_spectra
 
 
 def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
@@ -55,8 +56,18 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
         # Convert to flux
         result['flux'] = utils.counts_to_flux(wavelength, result['counts'], filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
 
+        # TODO: Get the uncertainty
+        result['unc'] = np.random.normal(loc=result['flux']*0.01)
+
+        # Make into an array for easy combining
+        result['spectrum'] = np.array([result[i] for i in ['wavelength', 'flux', 'unc']])
+
         # Add result to the dictionary
         results[name] = result
+
+    # Combine the order 1 and 2 spectra
+    combined = combine_spectra(results['order1']['spectrum'], results['order2']['spectrum'])
+    results['final'] = {'flux': combined[1], 'wavelength': combined[0], 'unc': combined[2], 'filter': filt, 'subarray': subarray}
 
     return results
 
