@@ -288,6 +288,35 @@ class SossExposure(object):
         else:
             return fig
 
+
+    def plot_extracted_spectra(self, name=None, draw=True):
+        """
+        Plot the extracted 1D spectra
+
+        Parameters
+        ----------
+        name: str (optional)
+            The name of the extracted data
+        """
+        # Select the extractions
+        fig = None
+        if name is None:
+            name = self.extracted.keys()[0]
+
+        # Get the data dictionary and color
+        result = self.extracted[name]
+
+        # Draw the figure
+        counts = result['order1']['counts']
+        flux = result['order1']['flux']
+        wave = result['order1']['wavelength']
+        fig = plt.plot_time_series_spectra(wave=wave, flux=flux)
+
+        if draw:
+            show(fig)
+        else:
+            return fig
+
     def plot_spectra(self, idx=0, dtype='flux', names=None, order=None, draw=True):
         """
         Plot the extracted 1D spectrum

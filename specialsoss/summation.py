@@ -42,6 +42,6 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=1, units=units, **kwargs)
 
     # Make results dictionary
-    results = {'order1': {'wavelength': wavelength, 'counts': counts, 'flux': flux, 'filter': filt, 'subarray': subarray}}
+    results = {'wavelength': wavelength, 'counts': counts, 'flux': flux, 'filter': filt, 'subarray': subarray}
 
     return results
