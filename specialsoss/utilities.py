@@ -2,6 +2,9 @@
 
 """A module of shared tools for SOSS data"""
 
+import os
+from pkg_resources import resource_filename
+
 import numpy as np
 
 
@@ -92,3 +95,26 @@ def combine_spectra(s1, s2):
         new_spec = np.concatenate([left, overlap, right], axis=1)
 
     return new_spec
+
+
+def test_simulations():
+    """
+    Make test simulations using awesimsoss
+    """
+    try:
+        from awesimsoss import BlackbodyTSO
+
+        # Save location
+        path = resource_filename('specialsoss', 'files/')
+
+        # Delete old files
+        os.system('rm {}/*.fits'.format(path))
+
+        for filt in ['CLEAR', 'F277W']:
+            for subarr in ['SUBSTRIP96', 'SUBSTRIP256']:
+
+                tso = BlackbodyTSO(nints=2, ngrps=2, subarray=subarr, filter=filt)
+                tso.export(os.path.join(path, '{}_{}_ramp.fits'.format(subarr, filt)))
+
+    except ImportError:
+        print("Please install awesimsoss to generate test simulations.")

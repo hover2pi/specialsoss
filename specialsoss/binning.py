@@ -46,24 +46,27 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
     # Extract each order
     for n, (wavelength, wavebin, mask) in enumerate(zip(wavelengths, wavebins, pixel_masks)):
 
-        # Results
-        name = 'order{}'.format(n+1)
-        result = {'wavelength': wavelength, 'filter': filt, 'subarray': subarray}
-
         # Bin the counts
-        result['counts'] = bin_counts(data, wavebin, mask)
+        counts = bin_counts(data, wavebin, mask)
 
         # Convert to flux
-        result['flux'] = utils.counts_to_flux(wavelength, result['counts'], filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
+        flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
 
         # TODO: Get the uncertainty
-        result['unc'] = np.random.normal(loc=result['flux']*0.01)
+        unc = np.random.normal(loc=flux*0.01)
 
         # Make into an array for easy combining
-        result['spectrum'] = np.array([result[i] for i in ['wavelength', 'flux', 'unc']])
+        spectrum = np.array([wavelength, flux, unc])
+
+        # Make arrays into monotonically increasing arrays
+        idx = spectrum[0].argsort()
+        spectrum = spectrum[:, idx]
+        counts = counts[idx]
+        wavelength, flux, unc = spectrum
 
         # Add result to the dictionary
-        results[name] = result
+        name = 'order{}'.format(n+1)
+        results[name] = {'counts': counts, 'flux': flux, 'unc': unc, 'wavelength': wavelength, 'filter': filt, 'subarray': subarray}
 
     # Combine the order 1 and 2 spectra
     combined = combine_spectra(results['order1']['spectrum'], results['order2']['spectrum'])
