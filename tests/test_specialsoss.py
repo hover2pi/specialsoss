@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Tests for `specialsoss` package."""
+"""Tests for `specialsoss` module."""
 
 import unittest
 from pkg_resources import resource_filename
