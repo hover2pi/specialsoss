@@ -27,7 +27,7 @@ class SossExposure(object):
     """
     A class object to load a SOSS exposure file and extract and manipulate spectra
     """
-    def __init__(self, filepath, name='My SOSS Observations', calibrate=True, **kwargs):
+    def __init__(self, filepath, name='My SOSS Observations', **kwargs):
         """
         Initialize the SOSS extraction object
 
@@ -37,8 +37,6 @@ class SossExposure(object):
             The path to the SOSS data
         name: str
             The name of the observation set
-        calibrate: bool
-            Pipeline process the input file
         """
         # Make sure the file exists
         if not os.path.exists(filepath) or not filepath.endswith('.fits'):
@@ -46,15 +44,24 @@ class SossExposure(object):
 
         # Store attributes
         self.name = name
-        self.filepath = filepath
         self.time = None
 
-        # Pipeline process
-        if calibrate:
-            self.filepath = self._pipeline_process(filepath)
+        # Determine processing level of input file
+        if filepath.endswith('_uncal.fits'):
+            self.uncal_file = filepath
+            self.ramp_file = None
+            self.calibrated = False
+
+        elif filepath.endswith('_ramp.fits'):
+            self.uncal_file = None
+            self.ramp_file = filepath
+            self.calibrated = True
+
+        else:
+            raise ValueError("{} processing level unclear. Please input an 'uncal' or 'ramp' file.".format(filepath))
 
         # Load the file
-        self.load_file(self.filepath)
+        self.load_file(filepath)
 
         # Load the wavelength calibration file
         self.load_filters()
@@ -62,6 +69,21 @@ class SossExposure(object):
 
         # Dictionary for the extracted spectra
         self.extracted = {}
+
+    def calibrate(self, **kwargs):
+        """
+        Pipeline process the current exposure
+        """
+        # No uncal file
+        if self.uncal_file is None:
+            print("No 'uncal' file to calibrate since 'ramp' file {} was initialized.".format(self.ramp_file))
+
+        # Proceed with calibration
+        else:
+            self.ramp_file = self._pipeline_process(self.uncal_file, **kwargs)
+
+            # Load the calibrated ramp file
+            self.load_file(self.ramp_file)
 
     def caluclate_order_masks(self):
         """
@@ -171,13 +193,10 @@ class SossExposure(object):
         """
         # Make sure the file exists
         if not os.path.exists(filepath) or not filepath.endswith('.fits'):
-            raise IOError(filepath, ": Invalid file")
-
-        # Get the data
-        self.raw_data = fits.getdata(filepath, **kwargs)
-        self.header = fits.getheader(filepath)
+            raise IOError("{} : Invalid file".format(filepath))
 
         # Glean configuration info
+        self.header = fits.getheader(filepath)
         self.nints = self.header['NINTS']
         self.ngrps = self.header['NGROUPS']
         self.nrows = self.header['SUBSIZE2']
@@ -186,11 +205,11 @@ class SossExposure(object):
         self.subarray = 'FULL' if self.nrows == 2048 else 'SUBSTRIP96' if self.nrows == 96 else 'SUBSTRIP256'
 
         # Ensure data is in 4 dimensions
-        self.data = copy.copy(self.raw_data)
+        self.data = fits.getdata(filepath, **kwargs)
         if self.data.ndim == 3:
             self.data.shape = (self.nints, self.ngrps, self.nrows, self.ncols)
         if self.data.ndim != 4:
-            raise ValueError("Data dimensions must be 3 or 4. {} is not valid.". format(self.raw_data.ndim))
+            raise ValueError("Data dimensions must be 3 or 4. {} is not valid.". format(self.data.ndim))
 
         # Compose a median image from the stack
         self.median = np.median(self.data, axis=(0, 1))
@@ -236,7 +255,7 @@ class SossExposure(object):
             # Run the pipeline
             from jwst.pipeline import Detector1Pipeline
             tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=configdir, output_dir=outdir)
-            processed = uncal_file.replace('.fits', '_ramp.fits')
+            processed = uncal_file.replace('_uncal.fits', '_ramp.fits')
 
             return processed
 
@@ -287,7 +306,6 @@ class SossExposure(object):
             show(fig)
         else:
             return fig
-
 
     def plot_extracted_spectra(self, name=None, draw=True):
         """
@@ -363,14 +381,20 @@ class SossExposure(object):
                 color = next(colors)
 
                 # Draw the figure
-                for order in orders:
-                    key = 'order{}'.format(order)
-                    if key in result:
-                        legend = ' - '.join([key, name])
-                        data = result[key][dtype]
-                        wave = result[key]['wavelength']
-                        flux = data[idx]
-                        fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
+                data = result[dtype]
+                wave = result['wavelength']
+                flux = data[idx]
+                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
+
+                # # Draw the figure with orders separated
+                # for order in orders:
+                #     key = 'order{}'.format(order)
+                #     if key in result:
+                #         legend = ' - '.join([key, name])
+                #         data = result[key][dtype]
+                #         wave = result[key]['wavelength']
+                #         flux = data[idx]
+                #         fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
 
         if fig is not None:
             if draw:
@@ -390,34 +414,25 @@ class SossExposure(object):
             return fig
 
 
-class RealExposure(SossExposure):
-    """
-    A test instance with CV3 data loaded
-    """
-    def __init__(self, **kwargs):
-        """
-        Initialize the object
-        """
-        # Get the file
-        file = resource_filename('specialsoss', 'files/SUBSTRIP256_CV3.fits')
-
-        # Inherit from SossObs
-        super().__init__(file, name='CV3 Observation', **kwargs)
-
-
 class SimExposure(SossExposure):
     """
     A test instance with the data preloaded
     """
-    def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', calibrate=True, **kwargs):
+    def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', level='uncal', **kwargs):
         """
-        Initialize the object
-        """
-        # To calibrate or not to calibrate
-        ext = 'ramp' if calibrate else 'uncal'
+        Initialize the SOSS extraction object
 
+        Parameters
+        ----------
+        subarray: str
+            The desired subarray, ['SUBSTRIP96', 'SUBSTRIP256', 'FULL']
+        filt: str
+            The desired filter, ['CLEAR', 'F277W']
+        level: str
+            The desired level of pipeline processing, ['uncal', 'ramp']
+        """
         # Get the file
-        file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, ext))
+        file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, level))
 
         # Inherit from SossObs
-        super().__init__(file, name='Simulated Observation', calibrate=False, **kwargs)
+        super().__init__(file, name='Simulated Observation', **kwargs)
