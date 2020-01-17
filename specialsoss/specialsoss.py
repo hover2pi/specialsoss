@@ -21,6 +21,7 @@ from . import decontaminate as dec
 from . import reconstruction as rc
 from . import summation as sm
 from . import binning as bn
+from . import sossfile as sf
 
 
 class SossExposure(object):
@@ -34,43 +35,45 @@ class SossExposure(object):
         Parameters
         ----------
         filepath: str
-            The path to the SOSS data
+            The path to the SOSS data, which must end with '_<ext>.fits',
+            where 'ext' is ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
         name: str
-            The name of the observation set
+            The name of the exposure set
         """
         # Make sure the file exists
-        if not os.path.exists(filepath) or not filepath.endswith('.fits'):
+        if not os.path.exists(filepath):
             raise FileNotFoundError("{}: Invalid file".format(filepath))
 
         # Store attributes
         self.name = name
         self.time = None
 
-        # Determine processing level of input file
-        if filepath.endswith('_uncal.fits'):
-            self.uncal_file = filepath
-            self.ramp_file = None
-            self.calibrated = False
+        # Store empty SossFile objects
+        self.uncal_file = sf.SossFile()  # 4D Uncalibrated raw input
+        self.ramp_file = sf.SossFile() # 4D Corrected ramp data
+        self.rate_file = sf.SossFile() # 2D Corrected countrate image
+        self.rateints_file = sf.SossFile() # 3D Corrected countrate per integration
+        self.calints_file = sf.SossFile() # 3D Calibrated data
+        self.x1dints_file = sf.SossFile() # 2D Extracted spectra
 
-        elif filepath.endswith('_ramp.fits'):
-            self.uncal_file = None
-            self.ramp_file = filepath
-            self.calibrated = True
-
-        else:
-            raise ValueError("{} processing level unclear. Please input an 'uncal' or 'ramp' file.".format(filepath))
+        # Reset file levels
+        self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
 
         # Load the file
         self.load_file(filepath)
 
-        # Load the wavelength calibration file
+        # Load the order throughput, wavelength calibration, and order mask files
         self.load_filters()
-        self.load_wavecal()
+        # self.order_masks = lt.order_masks(self.median)
 
         # Dictionary for the extracted spectra
         self.extracted = {}
 
-    def calibrate(self, **kwargs):
+        # Print uncal warning
+        if self.uncal_file is not None:
+            print("Looks like you have initialized an 'uncal' file! To pipeline process it, run the calibrate() method.")
+
+    def calibrate(self, configdir=None, outdir=None, **kwargs):
         """
         Pipeline process the current exposure
         """
@@ -80,10 +83,39 @@ class SossExposure(object):
 
         # Proceed with calibration
         else:
-            self.ramp_file = self._pipeline_process(self.uncal_file, **kwargs)
 
-            # Load the calibrated ramp file
-            self.load_file(self.ramp_file)
+            # Get config directory
+            if configdir is None:
+                configdir = resource_filename('specialsoss', 'files')
+
+            # Get output directory
+            if outdir is None:
+                outdir = os.path.dirname(self.uncal_file)
+
+            # Get basename
+            basename = os.path.basename(self.uncal_file)
+            file = os.path.join(outdir, basename)
+
+            # Check for the pipeline
+            try:
+
+                from jwst.pipeline import Detector1Pipeline, Spec2Pipeline
+
+                # DETECTOR1
+                cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
+                tso1 = Detector1Pipeline.call(self.uncal_file, save_results=True, config_file=cfg1_file, output_dir=outdir)
+                self.ramp_file = file.replace('_uncal.fits', '_ramp.fits')
+                self.rate_file = file.replace('_uncal.fits', '_rate.fits')
+                self.rateints_file = file.replace('_uncal.fits', '_rateints.fits')
+
+                # SPEC2
+                cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
+                tso2 = Spec2Pipeline.call(self.rateints_file, save_results=True, config_file=cfg2_file, output_dir=outdir)
+                self.calints_file = file.replace('_uncal.fits', '_calints.fits')
+                self.x1dints_file = file.replace('_uncal.fits', '_x1dints.fits')
+
+            except ImportError:
+                print("Could not import JWST pipeline")
 
     def caluclate_order_masks(self):
         """
@@ -180,6 +212,13 @@ class SossExposure(object):
         # Pull out relevant attributes
         track = ['ncols', 'nrows', 'nints', 'ngrps', 'subarray', 'filter']
         settings = {key: val for key, val in self.__dict__.items() if key in track}
+
+        # Get file info
+        for level in self.levels:
+            fileobj = getattr(self, '{}_file'.format(level))
+            file = None if fileobj is None else fileobj.file
+            settings.update({'{}_file'.format(level): file})
+
         return settings
 
     def load_file(self, filepath, **kwargs):
@@ -192,30 +231,29 @@ class SossExposure(object):
             The path to the SOSS data
         """
         # Make sure the file exists
-        if not os.path.exists(filepath) or not filepath.endswith('.fits'):
+        if not os.path.exists(filepath):
             raise IOError("{} : Invalid file".format(filepath))
 
-        # Glean configuration info
-        self.header = fits.getheader(filepath)
-        self.nints = self.header['NINTS']
-        self.ngrps = self.header['NGROUPS']
-        self.nrows = self.header['SUBSIZE2']
-        self.ncols = self.header['SUBSIZE1']
-        self.filter = self.header['FILTER']
-        self.subarray = 'FULL' if self.nrows == 2048 else 'SUBSTRIP96' if self.nrows == 96 else 'SUBSTRIP256'
+        # Determine processing level of input file
+        if not any([filepath.endswith('_{}.fits'.format(level)) for level in self.levels]):
+            raise ValueError('Not a recognized JWST file extension. Please use {}'.format(self.levels))
 
-        # Ensure data is in 4 dimensions
-        self.data = fits.getdata(filepath, **kwargs)
-        if self.data.ndim == 3:
-            self.data.shape = (self.nints, self.ngrps, self.nrows, self.ncols)
-        if self.data.ndim != 4:
-            raise ValueError("Data dimensions must be 3 or 4. {} is not valid.". format(self.data.ndim))
+        # Save the filepath
+        ext = filepath.split('_')[-1][:-5]
+        attr = '{}_file'.format(ext)
+        fileobj = sf.SossFile(filepath)
+        setattr(self, attr, fileobj)
 
-        # Compose a median image from the stack
-        self.median = np.median(self.data, axis=(0, 1))
+        # Load the attributes
+        self.nints = fileobj.nints
+        self.ngrps = fileobj.ngrps
+        self.nrows = fileobj.nrows
+        self.ncols = fileobj.ncols
+        self.filter = fileobj.filter
+        self.subarray = fileobj.subarray
+        self.wavecal = fileobj.wavecal
 
-        # Load the default order masks
-        self.order_masks = lt.order_masks(self.median)
+        print("'{}' file loaded from {}".format(ext, filepath))
 
     def load_filters(self):
         """
@@ -229,20 +267,8 @@ class SossExposure(object):
             if os.path.isfile(file):
                 self.filters.append(np.genfromtxt(file, unpack=True))
 
-    def load_wavecal(self, file=None):
-        """
-        Load the wavelength calibration for orders 1, 2, and 3
-
-        Parameters
-        ----------
-        file: str (optional)
-            The path to a custom wavelength calibration file
-        """
-        # Load wavelength calibration file
-        self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
-
     @staticmethod
-    def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files/calwebb_tso1.cfg'), outdir=None):
+    def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files'), outdir=None):
         """
         Run the file through the JWST pipeline, storing the data and header
         """
@@ -252,10 +278,17 @@ class SossExposure(object):
             if outdir is None:
                 outdir = os.path.dirname(uncal_file)
 
-            # Run the pipeline
+            # DETECTOR1
             from jwst.pipeline import Detector1Pipeline
-            tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=configdir, output_dir=outdir)
+            cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
+            tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=cfg1_file, output_dir=outdir)
             processed = uncal_file.replace('_uncal.fits', '_ramp.fits')
+
+            # SPEC2
+            cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
+            tso1 = Detector1Pipeline.call(self.rateints_file, save_results=True, config_file=cfg2_file, output_dir=outdir)
+            processed = uncal_file.replace('_uncal.fits', '_ramp.fits')
+            calwebb_tso-spec2
 
             return processed
 
@@ -284,7 +317,7 @@ class SossExposure(object):
         else:
             return fig
 
-    def plot_frames(self, idx=0, scale='linear', draw=True, **kwargs):
+    def plot_frames(self, ext='uncal', idx=0, scale='linear', draw=True, **kwargs):
         """
         Plot a single frame of the data
 
@@ -293,19 +326,10 @@ class SossExposure(object):
         idx: int
             The index of the frame to plot
         """
-        # Reshape the data
-        dim = self.data.shape
-        data = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])
-
-        # Make the figure
-        title = '{}: Frames'.format(self.name)
-        coeffs = lt.trace_polynomial()
-        fig = plt.plot_frames(data, idx=idx, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
-
-        if draw:
-            show(fig)
-        else:
-            return fig
+        # Plot the appropriate file
+        fileobj = getattr(self, '{}_file'.format(ext))
+        if fileobj.file is not None:
+            fileobj.plot(scale=scale, draw=draw)
 
     def plot_extracted_spectra(self, name=None, draw=True):
         """
