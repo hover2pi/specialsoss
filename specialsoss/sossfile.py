@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+"""A module to handle NIRISS SOSS data in JWST pipeline file format"""
+
 from copy import copy
 import os
 
@@ -17,7 +21,7 @@ class SossFile:
         """
         Initialize the SossFile object
         """
-        # Acceptible levels
+        # Calibration levels
         self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
 
         # Set default attributes to None
@@ -115,6 +119,8 @@ class SossFile:
         ----------
         scale: str
             The scale to plot, ['linear', 'log']
+        coeffs: sequence
+            The polynomial coefficients of the traces
         draw: bool
             Draw the figure instead of returning it
         """
