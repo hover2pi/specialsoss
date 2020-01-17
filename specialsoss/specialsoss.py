@@ -49,12 +49,12 @@ class SossExposure(object):
         self.time = None
 
         # Store empty SossFile objects
-        self.uncal_file = sf.SossFile()  # 4D Uncalibrated raw input
-        self.ramp_file = sf.SossFile() # 4D Corrected ramp data
-        self.rate_file = sf.SossFile() # 2D Corrected countrate image
-        self.rateints_file = sf.SossFile() # 3D Corrected countrate per integration
-        self.calints_file = sf.SossFile() # 3D Calibrated data
-        self.x1dints_file = sf.SossFile() # 1D Extracted spectra
+        self.uncal = sf.SossFile()  # 4D Uncalibrated raw input
+        self.ramp = sf.SossFile() # 4D Corrected ramp data
+        self.rate = sf.SossFile() # 2D Corrected countrate image
+        self.rateints = sf.SossFile() # 3D Corrected countrate per integration
+        self.calints = sf.SossFile() # 3D Calibrated data
+        self.x1dints = sf.SossFile() # 1D Extracted spectra
 
         # Reset file levels
         self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
@@ -70,54 +70,10 @@ class SossExposure(object):
         self.extracted = {}
 
         # Print uncal warning
-        if self.uncal_file is not None:
-            print("Looks like you have initialized an 'uncal' file! To pipeline process it, run the calibrate() method.")
+        if self.uncal is not None:
+            print("Looks like you have initialized an 'uncal' file! To pipeline process it, run 'SossExposure.uncal.calibrate()' method.")
 
-    def calibrate(self, configdir=None, outdir=None, **kwargs):
-        """
-        Pipeline process the current exposure
-        """
-        # No uncal file
-        if self.uncal_file is None:
-            print("No 'uncal' file to calibrate since 'ramp' file {} was initialized.".format(self.ramp_file))
-
-        # Proceed with calibration
-        else:
-
-            # Get config directory
-            if configdir is None:
-                configdir = resource_filename('specialsoss', 'files')
-
-            # Get output directory
-            if outdir is None:
-                outdir = os.path.dirname(self.uncal_file)
-
-            # Get basename
-            basename = os.path.basename(self.uncal_file)
-            file = os.path.join(outdir, basename)
-
-            # Check for the pipeline
-            try:
-
-                from jwst.pipeline import Detector1Pipeline, Spec2Pipeline
-
-                # DETECTOR1
-                cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
-                tso1 = Detector1Pipeline.call(self.uncal_file, save_results=True, config_file=cfg1_file, output_dir=outdir)
-                self.ramp_file = file.replace('_uncal.fits', '_ramp.fits')
-                self.rate_file = file.replace('_uncal.fits', '_rate.fits')
-                self.rateints_file = file.replace('_uncal.fits', '_rateints.fits')
-
-                # SPEC2
-                cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
-                tso2 = Spec2Pipeline.call(self.rateints_file, save_results=True, config_file=cfg2_file, output_dir=outdir)
-                self.calints_file = file.replace('_uncal.fits', '_calints.fits')
-                self.x1dints_file = file.replace('_uncal.fits', '_x1dints.fits')
-
-            except ImportError:
-                print("Could not import JWST pipeline")
-
-    def caluclate_order_masks(self):
+    def calculate_order_masks(self):
         """
         Calculate the order masks from the median image
         """
@@ -125,6 +81,31 @@ class SossExposure(object):
         self.order_masks = lt.order_masks(self.median, save=True)
 
         print("New order masks calculated from median image.")
+
+    def calibrate(self, ext='uncal', configdir=None, outdir=None, **kwargs):
+        """
+        Pipeline process a file in the exposure object
+
+        Parameters
+        ----------
+        ext: str
+            The extension to calibrate
+        configdir: str
+            The directory containing the configuration files
+        outdir: str
+            The directory to put the calibrated files into
+        """
+        if ext not in self.levels:
+            raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
+
+        # Plot the appropriate file
+        fileobj = getattr(self, ext)
+        if fileobj.file is not None:
+            new_files = fileobj.calibrate(configdir=configdir, outdir=outdir, **kwargs)
+
+        # Load the calibrated files
+        for level, file in new_files.items():
+            self.load_file(file)
 
     def decontaminate(self, f277w_exposure):
         """
@@ -186,26 +167,6 @@ class SossExposure(object):
             name = method
         self.extracted[name] = result
 
-    def _get_frame(self, idx=None):
-        """
-        Retrieve some frame data
-
-        Parameters
-        ----------
-        idx: int
-            The index of the frame to retrieve
-        """
-        if isinstance(idx, int):
-            dim = self.data.shape
-            if self.data.ndim == 4:
-                frame = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])[idx]
-            else:
-                frame = self.data[idx]
-        else:
-            frame = self.median
-
-        return frame
-
     @property
     def info(self):
         """Return some info about the observation"""
@@ -215,9 +176,9 @@ class SossExposure(object):
 
         # Get file info
         for level in self.levels:
-            fileobj = getattr(self, '{}_file'.format(level))
+            fileobj = getattr(self, level)
             file = None if fileobj is None else fileobj.file
-            settings.update({'{}_file'.format(level): file})
+            settings.update({level: file})
 
         return settings
 
@@ -240,9 +201,8 @@ class SossExposure(object):
 
         # Save the filepath
         ext = filepath.split('_')[-1][:-5]
-        attr = '{}_file'.format(ext)
         fileobj = sf.SossFile(filepath)
-        setattr(self, attr, fileobj)
+        setattr(self, ext, fileobj)
 
         # Load the attributes
         self.nints = fileobj.nints
@@ -267,69 +227,24 @@ class SossExposure(object):
             if os.path.isfile(file):
                 self.filters.append(np.genfromtxt(file, unpack=True))
 
-    @staticmethod
-    def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files'), outdir=None):
+    def plot(self, ext='uncal', idx=None, scale='linear', draw=True, **kwargs):
         """
-        Run the file through the JWST pipeline, storing the data and header
-        """
-        # Check for the pipeline
-        try:
-
-            if outdir is None:
-                outdir = os.path.dirname(uncal_file)
-
-            # DETECTOR1
-            from jwst.pipeline import Detector1Pipeline
-            cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
-            tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=cfg1_file, output_dir=outdir)
-            processed = uncal_file.replace('_uncal.fits', '_ramp.fits')
-
-            # SPEC2
-            cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
-            tso1 = Detector1Pipeline.call(self.rateints_file, save_results=True, config_file=cfg2_file, output_dir=outdir)
-            processed = uncal_file.replace('_uncal.fits', '_ramp.fits')
-            calwebb_tso-spec2
-
-            return processed
-
-        except ImportError:
-            print("Could not import JWST pipeline. {} has not been processed.".format(file))
-
-    def plot_frame(self, idx=None, scale='linear', draw=True, **kwargs):
-        """
-        Plot a single frame of the data
+        Plot a frame or all frames of any image data
 
         Parameters
         ----------
+        ext: str
+            The extension to plot
         idx: int
             The index of the frame to plot
         """
-        # Get the data
-        frame = self._get_frame(idx)
+        if ext not in self.levels:
+            raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
 
-        # Make the figure
-        title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
-        coeffs = lt.trace_polynomial()
-        fig = plt.plot_frame(frame, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
-
-        if draw:
-            show(fig)
-        else:
-            return fig
-
-    def plot_frames(self, ext='uncal', idx=0, scale='linear', draw=True, **kwargs):
-        """
-        Plot a single frame of the data
-
-        Parameters
-        ----------
-        idx: int
-            The index of the frame to plot
-        """
         # Plot the appropriate file
         fileobj = getattr(self, '{}_file'.format(ext))
         if fileobj.file is not None:
-            fileobj.plot(scale=scale, draw=draw)
+            fileobj.plot(idx=idx, scale=scale, draw=draw)
 
     def plot_extracted_spectra(self, name=None, draw=True):
         """
