@@ -54,7 +54,7 @@ class SossExposure(object):
         self.rate_file = sf.SossFile() # 2D Corrected countrate image
         self.rateints_file = sf.SossFile() # 3D Corrected countrate per integration
         self.calints_file = sf.SossFile() # 3D Calibrated data
-        self.x1dints_file = sf.SossFile() # 2D Extracted spectra
+        self.x1dints_file = sf.SossFile() # 1D Extracted spectra
 
         # Reset file levels
         self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
