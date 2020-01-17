@@ -64,13 +64,13 @@ class SossExposure(object):
 
         # Load the order throughput, wavelength calibration, and order mask files
         self.load_filters()
-        # self.order_masks = lt.order_masks(self.median)
+        self.order_masks = lt.order_masks(self.median)
 
         # Dictionary for the extracted spectra
         self.extracted = {}
 
         # Print uncal warning
-        if self.uncal is not None:
+        if self.uncal.file is not None:
             print("Looks like you have initialized an 'uncal' file! To pipeline process it, run 'SossExposure.uncal.calibrate()' method.")
 
     def calculate_order_masks(self):
@@ -212,6 +212,7 @@ class SossExposure(object):
         self.filter = fileobj.filter
         self.subarray = fileobj.subarray
         self.wavecal = fileobj.wavecal
+        self.median = fileobj.median
 
         print("'{}' file loaded from {}".format(ext, filepath))
 
@@ -227,7 +228,7 @@ class SossExposure(object):
             if os.path.isfile(file):
                 self.filters.append(np.genfromtxt(file, unpack=True))
 
-    def plot(self, ext='uncal', idx=None, scale='linear', draw=True, **kwargs):
+    def plot(self, ext='uncal', scale='linear', draw=True, **kwargs):
         """
         Plot a frame or all frames of any image data
 
@@ -244,7 +245,7 @@ class SossExposure(object):
         # Plot the appropriate file
         fileobj = getattr(self, '{}_file'.format(ext))
         if fileobj.file is not None:
-            fileobj.plot(idx=idx, scale=scale, draw=draw)
+            fileobj.plot(scale=scale, draw=draw)
 
     def plot_extracted_spectra(self, name=None, draw=True):
         """

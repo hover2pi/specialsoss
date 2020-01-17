@@ -169,7 +169,12 @@ class SossFile:
 
             # Compose a median image from the stack
             if self.ext != 'x1dints':
-                self.median = np.median(self.data, axis=(0, 1))
+                if self.data.ndim == 4:
+                    self.median = np.median(self.data, axis=(0, 1))
+                elif self.data.ndim == 3:
+                    self.median = np.median(self.data, axis=0)
+                else:
+                    self.median = self.data
 
         else:
             raise TypeError('File path must be a string. {} was given'.format(type(filepath)))
@@ -211,7 +216,7 @@ class SossFile:
         # Load wavelength calibration file
         self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
 
-    def plot(self, idx=None, scale='linear', coeffs=None, draw=True, **kwargs):
+    def plot(self, scale='linear', coeffs=None, draw=True, **kwargs):
         """
         Plot the frames of data
 
@@ -236,8 +241,7 @@ class SossFile:
         # Make the figure
         title = '{} Frames'.format(self.ext)
         coeffs = lt.trace_polynomial()
-        plot_func = plt.plot_frame if isinstance(idx, int) else plt.plot_frames
-        fig = plot_func(data, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
+        fig = plt.plot_frames(data, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         if draw:
             show(fig)
