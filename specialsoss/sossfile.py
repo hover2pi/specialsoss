@@ -4,6 +4,7 @@
 
 from copy import copy
 import os
+from pkg_resources import resource_filename
 
 from astropy.io import fits
 from bokeh.plotting import figure, show
@@ -42,6 +43,69 @@ class SossFile:
         # Set the filepath to populate the attributes
         self.file = filepath
 
+    def calibrate(self, configdir=None, outdir=None, **kwargs):
+        """
+        Pipeline process the file
+
+        Parameters
+        ----------
+        configdir: str
+            The directory containing the configuration files
+        outdir: str
+            The directory to put the calibrated files into
+        """
+        # Check for the pipeline
+        from jwst.pipeline import Detector1Pipeline, Spec2Pipeline
+
+        # Get config directory
+        if configdir is None:
+            configdir = resource_filename('specialsoss', 'files')
+
+        # Get output directory
+        if outdir is None:
+            outdir = os.path.dirname(self.file)
+
+        # Get basename
+        basename = os.path.basename(self.file)
+        file = os.path.join(outdir, basename)
+
+        # Dict for new files
+        new_files = {}
+
+        if self.ext == 'uncal':
+
+            # Create Detector1Pipeline instance
+            cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
+            tso1 = Detector1Pipeline.call(self.file, save_results=True, config_file=cfg1_file, output_dir=outdir)
+
+            # Calibrated files
+            new_files['ramp'] = os.path.join(outdir, file.replace('_uncal.fits', '_ramp.fits'))
+            new_files['rate'] = os.path.join(outdir, file.replace('_uncal.fits', '_rate.fits'))
+            new_files['rateints'] = os.path.join(outdir, file.replace('_uncal.fits', '_rateints.fits'))
+
+        if self.ext in ['rate', 'rateints']:
+
+            # SPEC2 Pipeline
+            cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
+            tso2 = Spec2Pipeline(save_results=True, config_file=cfg2_file, output_dir=outdir)
+
+            # Configure steps
+            tso2.cube_build.skip = True
+            tso2.extract_2d.skip = True
+            tso2.bkg_subtract.skip = True
+            tso2.msa_flagging.skip = True
+            tso2.barshadow.skip = True
+            tso2.extract_1d.save_results = True
+
+            # Run the pipeline
+            tso2.run(self.file)
+
+            # Calibrated files
+            new_files['calints'] = os.path.join(outdir, file.replace('_rateints.fits', '_calints.fits'))
+            new_files['x1dints'] = os.path.join(outdir, file.replace('_rateints.fits', '_x1dints.fits'))
+
+        return new_files
+
     @property
     def file(self):
         return self._file
@@ -75,11 +139,24 @@ class SossFile:
             # Save the filepath
             self.ext = filepath.split('_')[-1][:-5]
 
+            # Load wavelength calibration
+            self.load_wavecal()
+
             # Get the header and data from the FITS file
             hdulist = fits.open(filepath)
             self.hdulist = copy(hdulist)
             self.header = hdulist['PRIMARY'].header
-            self.data = hdulist['SCI'].data
+
+            # If x1dints file, grab the extracted spectra
+            if self.ext == 'x1dints':
+                self.data = [hdulist[n].data['FLUX'] for n in range(len(hdulist)) if hdulist[n].name == 'EXTRACT1D']
+                self.wavecal = [hdulist[n].data['WAVELENGTH'] for n in range(len(hdulist)) if hdulist[n].name == 'EXTRACT1D']
+
+            # If 2D or more, save SCI extension as data
+            else:
+                self.data = hdulist['SCI'].data
+
+            # Close the file
             hdulist.close()
 
             # Observation parameters
@@ -91,13 +168,36 @@ class SossFile:
             self.subarray = 'FULL' if self.nrows == 2048 else 'SUBSTRIP96' if self.nrows == 96 else 'SUBSTRIP256'
 
             # Compose a median image from the stack
-            self.median = np.median(self.data, axis=(0, 1))
-
-            # Load wavelength calibration
-            self.load_wavecal()
+            if self.ext != 'x1dints':
+                self.median = np.median(self.data, axis=(0, 1))
 
         else:
             raise TypeError('File path must be a string. {} was given'.format(type(filepath)))
+
+    def _get_frame(self, idx=None):
+        """
+        Retrieve some frame data
+
+        Parameters
+        ----------
+        idx: int
+            The index of the frame to retrieve
+        """
+        if isinstance(idx, int):
+
+            # Reshape the data
+            dim = self.data.shape
+            if self.data.ndim == 4:
+                frame = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])[idx]
+            elif self.data.ndim == 2:
+                frame = self.data.reshape(1, dim[0], dim[1])[idx]
+            else:
+                frame = self.data[idx]
+
+        else:
+            frame = self.median
+
+        return frame
 
     def load_wavecal(self, file=None):
         """
@@ -111,7 +211,7 @@ class SossFile:
         # Load wavelength calibration file
         self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
 
-    def plot(self, scale='linear', coeffs=None, draw=True, **kwargs):
+    def plot(self, idx=None, scale='linear', coeffs=None, draw=True, **kwargs):
         """
         Plot the frames of data
 
@@ -136,7 +236,8 @@ class SossFile:
         # Make the figure
         title = '{} Frames'.format(self.ext)
         coeffs = lt.trace_polynomial()
-        fig = plt.plot_frames(data, idx=0, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
+        plot_func = plt.plot_frame if isinstance(idx, int) else plt.plot_frames
+        fig = plot_func(data, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         if draw:
             show(fig)
