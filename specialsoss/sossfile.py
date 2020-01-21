@@ -104,6 +104,10 @@ class SossFile:
             new_files['calints'] = os.path.join(outdir, file.replace('_rateints.fits', '_calints.fits'))
             new_files['x1dints'] = os.path.join(outdir, file.replace('_rateints.fits', '_x1dints.fits'))
 
+        else:
+
+            print("Not sure how to calibrate a '{}' file right now.".format(self.ext))
+
         return new_files
 
     @property
