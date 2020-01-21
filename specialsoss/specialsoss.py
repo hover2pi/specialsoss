@@ -67,7 +67,7 @@ class SossExposure(object):
         self.order_masks = lt.order_masks(self.median)
 
         # Dictionary for the extracted spectra
-        self.extracted = {}
+        self.results = {}
 
         # Print uncal warning
         if self.uncal.file is not None:
@@ -130,7 +130,7 @@ class SossExposure(object):
             raise ValueError("filter = {}: Only an F277W exposure can be used for decontamination".format(new_filt))
 
         # Check that spectral extraction has been run on the CLEAR exposure
-        if not bool(self.extracted):
+        if not bool(self.results):
             raise ValueError("Please run 'extract' method on CLEAR exposure before decontamination")
 
         # Check that spectral extraction has been run on the F277W exposure
@@ -138,17 +138,21 @@ class SossExposure(object):
             raise ValueError("Please run 'extract' method on F277W exposure before decontamination")
 
         # Run the decontamination
-        self.extracted = dec.decontaminate(self.extracted, f277w_exposure.extracted)
+        self.results = dec.decontaminate(self.results, f277w_exposure.extracted)
 
-    def extract(self, method="sum", name=None, **kwargs):
+    def extract(self, ext='rateints', method="sum", name=None, **kwargs):
         """
         Extract the 1D spectra from the time series data
         using the specified method
 
         Parameters
         ----------
+        ext: str
+            The extension to extract
         method: str
             The extraction method to use, ["reconstruct", "bin", "sum"]
+        name: str
+            A name for the extraction results
         """
         # Validate the method
         valid_methods = ["reconstruct", "bin", "sum"]
@@ -158,14 +162,19 @@ class SossExposure(object):
         # Set the extraction function
         func = bn.extract if method == "bin" else sm.extract if method == "sum" else rc.extract
 
+        # Get the requested data
+        fileobj = getattr(self, ext)
+        if fileobj.data is None:
+            raise ValueError("No '{}' data to extract.".format(ext))
+
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(self.data, filt=self.filter, subarray=self.subarray, **kwargs)
+        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)
         result['method'] = method
 
         # Add the results to the table
         if name is None:
             name = method
-        self.extracted[name] = result
+        self.results[name] = result
 
     @property
     def info(self):
@@ -228,7 +237,7 @@ class SossExposure(object):
             if os.path.isfile(file):
                 self.filters.append(np.genfromtxt(file, unpack=True))
 
-    def plot(self, ext='uncal', scale='linear', draw=True, **kwargs):
+    def plot_frames(self, ext='uncal', scale='linear', draw=True, **kwargs):
         """
         Plot a frame or all frames of any image data
 
@@ -243,13 +252,17 @@ class SossExposure(object):
             raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
 
         # Plot the appropriate file
-        fileobj = getattr(self, '{}_file'.format(ext))
-        if fileobj.file is not None:
+        fileobj = getattr(self, ext)
+        if fileobj.file is None:
+            loaded = [level for level in self.levels if getattr(self, level).file is not None]
+            print("No data for '{0}' extension. Load `_{0}.fits' file or try {1}".format(ext, loaded))
+
+        else:
             fileobj.plot(scale=scale, draw=draw)
 
-    def plot_extracted_spectra(self, name=None, draw=True):
+    def plot_results(self, name=None, draw=True):
         """
-        Plot the extracted 1D spectra
+        Plot results of all integrations for the given extraction routine
 
         Parameters
         ----------
@@ -259,25 +272,25 @@ class SossExposure(object):
         # Select the extractions
         fig = None
         if name is None:
-            name = self.extracted.keys()[0]
+            name = list(self.results.keys())[0]
 
         # Get the data dictionary and color
-        result = self.extracted[name]
+        result = self.results[name]
 
         # Draw the figure
-        counts = result['order1']['counts']
-        flux = result['order1']['flux']
-        wave = result['order1']['wavelength']
-        fig = plt.plot_time_series_spectra(wave=wave, flux=flux)
+        counts = result['counts']
+        flux = result['flux']
+        wave = result['wavelength']
+        fig = plt.plot_time_series_spectra(wavelength=wave, flux=flux)
 
         if draw:
             show(fig)
         else:
             return fig
 
-    def plot_spectra(self, idx=0, dtype='flux', names=None, order=None, draw=True):
+    def compare_results(self, idx=0, dtype='flux', names=None, order=None, draw=True):
         """
-        Plot the extracted 1D spectrum
+        Compare results of multiple extraction routines for a given frame
 
         Parameters
         ----------
@@ -307,17 +320,17 @@ class SossExposure(object):
         # Select the extractions
         fig = None
         if names is None:
-            names = self.extracted.keys()
+            names = self.results.keys()
 
         for name in names:
 
-            if name not in self.extracted:
+            if name not in self.results:
                 print("'{}' method not used for extraction. Skipping.".format(name))
 
             else:
 
                 # Get the data dictionary and color
-                result = self.extracted[name]
+                result = self.results[name]
                 color = next(colors)
 
                 # Draw the figure
@@ -325,16 +338,6 @@ class SossExposure(object):
                 wave = result['wavelength']
                 flux = data[idx]
                 fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
-
-                # # Draw the figure with orders separated
-                # for order in orders:
-                #     key = 'order{}'.format(order)
-                #     if key in result:
-                #         legend = ' - '.join([key, name])
-                #         data = result[key][dtype]
-                #         wave = result[key]['wavelength']
-                #         flux = data[idx]
-                #         fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
 
         if fig is not None:
             if draw:
