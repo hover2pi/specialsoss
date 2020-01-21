@@ -18,16 +18,17 @@ class TestSossExposure(unittest.TestCase):
     def setUp(self):
         """Test instance setup"""
         # Make Spectrum class for testing
-        self.file = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_ramp.fits')
+        self.uncal = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_uncal.fits')
+        self.rateints = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_rateints.fits')
 
     def test_init(self):
-        """Test that a purely photometric SED can be creted"""
+        """Test that a rateints file can be initialized"""
         # Check name
-        obs = specialsoss.SossExposure(self.file, calibrate=False)
+        obs = specialsoss.SossExposure(self.uncal)
         self.assertEqual(obs.name, 'My SOSS Observations')
 
         # Check data ingest
-        self.assertEqual(obs.data.shape, (2, 2, 256, 2048))
+        self.assertEqual(obs.uncal.data.shape, (2, 2, 256, 2048))
         self.assertEqual(obs.subarray, 'SUBSTRIP256')
         self.assertEqual(obs.filter, 'CLEAR')
         self.assertEqual(obs.nints, 2)
@@ -37,34 +38,21 @@ class TestSossExposure(unittest.TestCase):
 
     def test_info(self):
         """Test the info property"""
-        obs = specialsoss.SossExposure(self.file, calibrate=False)
+        obs = specialsoss.SossExposure(self.uncal)
         obs.info
-
-    def test_get_frame(self):
-        """Test the _get_frame hidden method"""
-        # Make CLEAR obs
-        clear = specialsoss.SossExposure(self.file, calibrate=False)
-
-        # with idx
-        dat = clear._get_frame(idx=0)
-        self.assertEqual(np.sum(dat), np.sum(clear.data[0][0]))
-
-        # withoug idx, get median
-        dat = clear._get_frame()
-        self.assertEqual(np.sum(dat), np.sum(clear.median))
 
     def test_wavecal(self):
         """Test loading wavecal file"""
-        obs = specialsoss.SossExposure(self.file, calibrate=False)
-        self.assertEqual(obs.wavecal.shape, (3, obs.nrows, obs.ncols))
+        obs = specialsoss.SossExposure(self.uncal)
+        self.assertEqual(obs.wavecal.shape, (3, 2048, 2048))
 
     def test_decontaminate(self):
         """Test the decontaminate method works"""
         # Make CLEAR obs
-        clear = specialsoss.SossExposure(self.file, calibrate=False)
+        clear = specialsoss.SossExposure(self.rateints)
 
         # Make F277W obs
-        f277w = specialsoss.SossExposure(self.file, calibrate=False)
+        f277w = specialsoss.SossExposure(self.rateints)
         f277w.filter = 'F277W'
 
         # Fail if obs2 is not SossExposure
@@ -78,11 +66,11 @@ class TestSossExposure(unittest.TestCase):
 
         # Fail if obs1 is not extracted
         self.assertRaises(ValueError, clear.decontaminate, f277w)
-        clear.extract('sum')
+        clear.extract()
 
         # Fail if obs2 is not extracted
         self.assertRaises(ValueError, clear.decontaminate, f277w)
-        f277w.extract('sum')
+        f277w.extract()
 
         # Run decontaminate
         clear.decontaminate(f277w)
@@ -90,25 +78,22 @@ class TestSossExposure(unittest.TestCase):
     def test_extract(self):
         """Test the extract method"""
         # Make CLEAR obs
-        clear = specialsoss.SossExposure(self.file, calibrate=False)
+        clear = specialsoss.SossExposure(self.rateints)
 
         # Fail if bad etraction method
         self.assertRaises(ValueError, clear.extract, 'FOO')
 
         # Check extracted is empty
-        self.assertEqual(clear.extracted, {})
+        self.assertEqual(clear.results, {})
 
         # Run and check extracted is populated
-        clear.extract('sum')
-        self.assertNotEqual(clear.extracted, {})
+        clear.extract()
+        self.assertNotEqual(clear.results, {})
 
     def test_plots(self):
         """Test the plots work"""
         # Make CLEAR obs
-        clear = specialsoss.SossExposure(self.file, calibrate=False)
-
-        # Test plot_frame
-        fig = clear.plot_frame(draw=False)
+        clear = specialsoss.SossExposure(self.uncal)
 
         # Test plot_frames
         fig = clear.plot_frames(draw=False)
@@ -116,9 +101,11 @@ class TestSossExposure(unittest.TestCase):
         # Test plot_ramp
         fig = clear.plot_ramp(draw=False)
 
-        # Test plot_spectra
-        fig = clear.plot_spectra(dtype='flux', draw=False)
-        fig = clear.plot_spectra(dtype='counts', draw=False)
+        # Test result plot
+        fig = clear.plot_results(draw=False)
+
+        # Test comparison plot
+        fig = clear.compare_results(dtype='counts', draw=False)
 
 
 class TestSimExposure(unittest.TestCase):
