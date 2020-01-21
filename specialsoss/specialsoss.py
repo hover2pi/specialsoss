@@ -107,6 +107,63 @@ class SossExposure(object):
         for level, file in new_files.items():
             self.load_file(file)
 
+    def compare_results(self, idx=0, dtype='flux', names=None, order=None, draw=True):
+        """
+        Compare results of multiple extraction routines for a given frame
+
+        Parameters
+        ----------
+        idx: int
+            The frame index to plot
+        dtype: str
+            The data to plot, ['flux', 'counts']
+        names: seqence (optional)
+            The names of the extracted spectra to plot
+        order: int (optional)
+            The order to plot
+        """
+        # Get colors palette
+        colors = utils.COLORS
+
+        # Select the orders
+        if isinstance(order, int):
+            orders = [order]
+        else:
+            orders = [1, 2]
+
+        if dtype == 'counts':
+            ylabel = 'Counts [ADU/s]'
+        else:
+            ylabel = 'Flux Density [erg/s/cm2/A]'
+
+        # Select the extractions
+        fig = None
+        if names is None:
+            names = self.results.keys()
+
+        for name in names:
+
+            if name not in self.results:
+                print("'{}' method not used for extraction. Skipping.".format(name))
+
+            else:
+
+                # Get the data dictionary and color
+                result = self.results[name]
+                color = next(colors)
+
+                # Draw the figure
+                data = result[dtype]
+                wave = result['wavelength']
+                flux = data[idx]
+                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
+
+        if fig is not None:
+            if draw:
+                show(fig)
+            else:
+                return fig
+
     def decontaminate(self, f277w_exposure):
         """
         Decontaminate the GR700XD+CLEAR orders with GR700XD+F277W order 1
@@ -134,23 +191,23 @@ class SossExposure(object):
             raise ValueError("Please run 'extract' method on CLEAR exposure before decontamination")
 
         # Check that spectral extraction has been run on the F277W exposure
-        if not bool(f277w_exposure.extracted):
+        if not bool(f277w_exposure.results):
             raise ValueError("Please run 'extract' method on F277W exposure before decontamination")
 
         # Run the decontamination
-        self.results = dec.decontaminate(self.results, f277w_exposure.extracted)
+        self.results = dec.decontaminate(self.results, f277w_exposure.results)
 
-    def extract(self, ext='rateints', method="sum", name=None, **kwargs):
+    def extract(self, method="sum", ext='rateints', name=None, **kwargs):
         """
         Extract the 1D spectra from the time series data
         using the specified method
 
         Parameters
         ----------
-        ext: str
-            The extension to extract
         method: str
             The extraction method to use, ["reconstruct", "bin", "sum"]
+        ext: str
+            The extension to extract
         name: str
             A name for the extraction results
         """
@@ -175,6 +232,35 @@ class SossExposure(object):
         if name is None:
             name = method
         self.results[name] = result
+
+    def _get_extension(self, ext, err=True):
+        """
+        Get the data for the given extension
+
+        Parameters
+        ----------
+        ext: str
+            The name of the extension
+        err: bool
+            Throw an error instead of printing
+        """
+        # Check the level is valid
+        if ext not in self.levels:
+            raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
+
+        # Get the data from the appropriate file
+        fileobj = getattr(self, ext)
+        if fileobj.file is None:
+            loaded = [level for level in self.levels if getattr(self, level).file is not None]
+            msg = "No data for '{0}' extension. Load `_{0}.fits' file or try {1}".format(ext, loaded)
+
+            if err:
+                raise ValueError(msg)
+            else:
+                print(msg)
+
+        else:
+            return fileobj
 
     @property
     def info(self):
@@ -247,18 +333,19 @@ class SossExposure(object):
             The extension to plot
         idx: int
             The index of the frame to plot
+        draw: bool
+            Draw the figure instead of returning it
         """
-        if ext not in self.levels:
-            raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
+        # Get the file object
+        fileobj = self._get_extension(ext)
 
-        # Plot the appropriate file
-        fileobj = getattr(self, ext)
-        if fileobj.file is None:
-            loaded = [level for level in self.levels if getattr(self, level).file is not None]
-            print("No data for '{0}' extension. Load `_{0}.fits' file or try {1}".format(ext, loaded))
+        # Make the plot
+        fig = fileobj.plot(scale=scale)
 
+        if draw:
+            show(fig)
         else:
-            fileobj.plot(scale=scale, draw=draw)
+            return fig
 
     def plot_results(self, name=None, draw=True):
         """
@@ -268,88 +355,50 @@ class SossExposure(object):
         ----------
         name: str (optional)
             The name of the extracted data
+        draw: bool
+            Draw the figure instead of returning it
         """
-        # Select the extractions
-        fig = None
-        if name is None:
-            name = list(self.results.keys())[0]
+        if len(self.results) == 0:
+            fig = None
+            print("No results to plot. Please run `extract` method to generate some.")
 
-        # Get the data dictionary and color
-        result = self.results[name]
+        else:
 
-        # Draw the figure
-        counts = result['counts']
-        flux = result['flux']
-        wave = result['wavelength']
-        fig = plt.plot_time_series_spectra(wavelength=wave, flux=flux)
+            # Select the extractions
+            fig = None
+            if name is None:
+                name = list(self.results.keys())[0]
 
-        if draw:
+            # Get the data dictionary and color
+            result = self.results[name]
+
+            # Draw the figure
+            counts = result['counts']
+            flux = result['flux']
+            wave = result['wavelength']
+            fig = plt.plot_time_series_spectra(wavelength=wave, flux=flux)
+
+        if draw and fig is not None:
             show(fig)
         else:
             return fig
 
-    def compare_results(self, idx=0, dtype='flux', names=None, order=None, draw=True):
+    def plot_ramp(self, ext='uncal', draw=True):
         """
-        Compare results of multiple extraction routines for a given frame
+        Plot the total flux on each frame to display the ramp
 
         Parameters
         ----------
-        idx: int
-            The frame index to plot
-        dtype: str
-            The data to plot, ['flux', 'counts']
-        names: seqence (optional)
-            The names of the extracted spectra to plot
-        order: int (optional)
-            The order to plot
+        ext: str
+            The extension to plot
+        draw: bool
+            Draw the figure instead of returning it
         """
-        # Get colors palette
-        colors = utils.COLORS
+        # Get the file object
+        fileobj = self._get_extension(ext)
 
-        # Select the orders
-        if isinstance(order, int):
-            orders = [order]
-        else:
-            orders = [1, 2]
-
-        if dtype == 'counts':
-            ylabel = 'Counts [ADU/s]'
-        else:
-            ylabel = 'Flux Density [erg/s/cm2/A]'
-
-        # Select the extractions
-        fig = None
-        if names is None:
-            names = self.results.keys()
-
-        for name in names:
-
-            if name not in self.results:
-                print("'{}' method not used for extraction. Skipping.".format(name))
-
-            else:
-
-                # Get the data dictionary and color
-                result = self.results[name]
-                color = next(colors)
-
-                # Draw the figure
-                data = result[dtype]
-                wave = result['wavelength']
-                flux = data[idx]
-                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
-
-        if fig is not None:
-            if draw:
-                show(fig)
-            else:
-                return fig
-
-    def plot_ramp(self, draw=True):
-        """
-        Plot the total flux on each frame to display the ramp
-        """
-        fig = plt.plot_ramp(self.data)
+        # Make the plot
+        fig = fileobj.plot_ramp()
 
         if draw:
             show(fig)

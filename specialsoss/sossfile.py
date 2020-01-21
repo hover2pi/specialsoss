@@ -7,7 +7,7 @@ import os
 from pkg_resources import resource_filename
 
 from astropy.io import fits
-from bokeh.plotting import figure, show
+from bokeh.plotting import figure
 from hotsoss import locate_trace as lt
 from hotsoss import plotting as plt
 from hotsoss import utils
@@ -220,7 +220,7 @@ class SossFile:
         # Load wavelength calibration file
         self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
 
-    def plot(self, scale='linear', coeffs=None, draw=True, **kwargs):
+    def plot(self, scale='linear', coeffs=None, **kwargs):
         """
         Plot the frames of data
 
@@ -230,8 +230,6 @@ class SossFile:
             The scale to plot, ['linear', 'log']
         coeffs: sequence
             The polynomial coefficients of the traces
-        draw: bool
-            Draw the figure instead of returning it
         """
         # Reshape the data
         dim = self.data.shape
@@ -247,10 +245,25 @@ class SossFile:
         coeffs = lt.trace_polynomial()
         fig = plt.plot_frames(data, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
-        if draw:
-            show(fig)
+        return fig
+
+    def plot_ramp(self):
+        """
+        Plot the data as a ramp
+        """
+        # Reshape the data
+        dim = self.data.shape
+        if self.data.ndim == 4:
+            data = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])
+        elif self.data.ndim == 2:
+            data = self.data.reshape(1, dim[0], dim[1])
         else:
-            return fig
+            data = self.data
+
+        # Make the plot
+        fig = plt.plot_ramp(data)
+
+        return fig
 
     def __repr__(self):
         """
