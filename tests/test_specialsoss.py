@@ -17,7 +17,7 @@ class TestSossExposure(unittest.TestCase):
     """Test SossExposure object"""
     def setUp(self):
         """Test instance setup"""
-        # Make Spectrum class for testing
+        # Get files for testing
         self.uncal = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_uncal.fits')
         self.rateints = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_rateints.fits')
 
