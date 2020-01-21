@@ -31,12 +31,26 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     if data.ndim == 4:
         data = data.reshape((data.shape[0]*data.shape[1], data.shape[2], data.shape[3]))
 
+    # Trim reference pixels
+    # Left, right (all subarrays)
+    data = data[:, :, 4:-4]
+
+    # Top (excluding SUBSTRIP96)
+    if subarray != 'SUBSTRIP96':
+        data = data[:, :-4, :]
+
+    # Bottom (Only FULL frame)
+    if subarray == 'FULL':
+        data = data[:, 4:, :]
+
     # Get total counts in each pixel column
     counts = np.nansum(data, axis=1)
 
-    # Get the wavelength
+    # Get the wavelength map
     wavemap = utils.wave_solutions(subarray=subarray, order=1, **kwargs)
-    wavelength = np.nanmean(wavemap, axis=0)
+
+    # Get mean wavelength in each column
+    wavelength = np.nanmean(wavemap, axis=0)[4:-4]
 
     # Convert to flux using first order response
     flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=1, units=units, **kwargs)
