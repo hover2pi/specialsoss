@@ -383,28 +383,6 @@ class SossExposure(object):
         else:
             return fig
 
-    def plot_ramp(self, ext='uncal', draw=True):
-        """
-        Plot the total flux on each frame to display the ramp
-
-        Parameters
-        ----------
-        ext: str
-            The extension to plot
-        draw: bool
-            Draw the figure instead of returning it
-        """
-        # Get the file object
-        fileobj = self._get_extension(ext)
-
-        # Make the plot
-        fig = fileobj.plot_ramp()
-
-        if draw:
-            show(fig)
-        else:
-            return fig
-
 
 class SimExposure(SossExposure):
     """

@@ -98,9 +98,6 @@ class TestSossExposure(unittest.TestCase):
         # Test plot_frames
         fig = clear.plot_frames(draw=False)
 
-        # Test plot_ramp
-        fig = clear.plot_ramp(draw=False)
-
         # Test result plot
         fig = clear.plot_results(draw=False)
 

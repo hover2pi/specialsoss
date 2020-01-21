@@ -247,24 +247,6 @@ class SossFile:
 
         return fig
 
-    def plot_ramp(self):
-        """
-        Plot the data as a ramp
-        """
-        # Reshape the data
-        dim = self.data.shape
-        if self.data.ndim == 4:
-            data = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])
-        elif self.data.ndim == 2:
-            data = self.data.reshape(1, dim[0], dim[1])
-        else:
-            data = self.data
-
-        # Make the plot
-        fig = plt.plot_ramp(data)
-
-        return fig
-
     def __repr__(self):
         """
         Return the path to the file
