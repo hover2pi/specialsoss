@@ -178,9 +178,17 @@ class SossFile:
 
             # Determine the time axis given datetime and frame time
             time_str = '{} {}'.format(self.header['DATE-OBS'], self.header['TIME-OBS'])
-            starttime = datetime.strptime(time_str, "%m-%d-%Y %H:%M:%S.%f")
+            starttime = datetime.strptime(time_str, "%m/%d/%Y %H:%M:%S")
             dt = timedelta(seconds=self.frame_time)
             self.time = Time(starttime + dt*np.arange(self.nframes))
+
+            # Get time at end of each integration if 3D data
+            if self.data.ndim == 3:
+                self.time = self.time[self.ngrps-1::self.ngrps]
+
+            # Otherwise time axis is irrelevant
+            if self.data.ndim == 2:
+                self.time = None
 
             # Compose a median image from the stack
             if self.ext != 'x1dints':
