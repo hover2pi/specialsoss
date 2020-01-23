@@ -94,12 +94,16 @@ class TestSossExposure(unittest.TestCase):
         """Test the plots work"""
         # Make CLEAR obs
         clear = specialsoss.SossExposure(self.uncal)
+        clear.extract('sum', 'uncal')
 
         # Test plot_frames
         fig = clear.plot_frames(draw=False)
 
         # Test result plot
         fig = clear.plot_results(draw=False)
+
+        # Bad dtype
+        self.assertRaises(ValueError, clear.plot_results, 'FOO', draw=True)
 
         # Test comparison plot
         fig = clear.compare_results(dtype='counts', draw=False)
