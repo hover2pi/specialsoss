@@ -3,10 +3,12 @@
 """A module to handle NIRISS SOSS data in JWST pipeline file format"""
 
 from copy import copy
+from datetime import datetime, timedelta
 import os
 from pkg_resources import resource_filename
 
 from astropy.io import fits
+from astropy.time import Time
 from bokeh.plotting import figure
 from hotsoss import locate_trace as lt
 from hotsoss import plotting as plt
@@ -39,6 +41,7 @@ class SossFile:
         self.subarray = None
         self.median = None
         self.wavecal = None
+        self.time = None
 
         # Set the filepath to populate the attributes
         self.file = filepath
@@ -166,10 +169,18 @@ class SossFile:
             # Observation parameters
             self.nints = self.header['NINTS']
             self.ngrps = self.header['NGROUPS']
+            self.nframes = self.header['NFRAMES']
             self.nrows = self.header['SUBSIZE2']
             self.ncols = self.header['SUBSIZE1']
             self.filter = self.header['FILTER']
+            self.frame_time = self.header['TFRAME']
             self.subarray = 'FULL' if self.nrows == 2048 else 'SUBSTRIP96' if self.nrows == 96 else 'SUBSTRIP256'
+
+            # Determine the time axis given datetime and frame time
+            time_str = '{} {}'.format(self.header['DATE-OBS'], self.header['TIME-OBS'])
+            starttime = datetime.strptime(time_str, "%m-%d-%Y %H:%M:%S.%f")
+            dt = timedelta(seconds=self.frame_time)
+            self.time = Time(starttime + dt*np.arange(self.nframes))
 
             # Compose a median image from the stack
             if self.ext != 'x1dints':
