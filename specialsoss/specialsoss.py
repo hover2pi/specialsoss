@@ -350,14 +350,14 @@ class SossExposure(object):
         else:
             return fig
 
-    def plot_results(self, name=None, time_fmt='mjd', draw=True):
+    def plot_results(self, dtype='flux', name=None, time_fmt='mjd', draw=True):
         """
         Plot results of all integrations for the given extraction routine
 
         Parameters
         ----------
         name: str (optional)
-            The name of the extracted data
+            The name of the extracted data to plot
         time_fmt: str
             The astropy time format to use
         draw: bool
@@ -369,6 +369,11 @@ class SossExposure(object):
 
         else:
 
+            # Check dtype
+            dtypes = ['flux', 'counts']
+            if dtype not in dtypes:
+                raise ValueError("{}: Please select dtype from {}".format(dtype, dtypes))
+
             # Select the extractions
             fig = None
             if name is None:
@@ -378,13 +383,12 @@ class SossExposure(object):
             result = self.results[name]
 
             # Draw the figure
-            counts = result['counts']
-            flux = result['flux']
+            data = result[dtype]
             wave = result['wavelength']
             time = self.time.to_value(time_fmt)
             x = 'Wavelength [um]'
             y = 'Time [{}]'.format(time_fmt.upper())
-            fig = plt.plot_time_series_spectra(flux, wavelength=wave, time=time, ylabel=y, xlabel=x)
+            fig = plt.plot_time_series_spectra(data, wavelength=wave, time=time, ylabel=y, xlabel=x)
 
         if draw and fig is not None:
             show(fig)
