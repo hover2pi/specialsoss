@@ -147,6 +147,7 @@ class SossExposure(object):
                 print("'{}' method not used for extraction. Skipping.".format(name))
 
             else:
+
                 # Get the data dictionary and color
                 result = self.results[name]
                 color = next(colors)
@@ -154,7 +155,6 @@ class SossExposure(object):
                 # Draw the figure
                 data = result[dtype]
                 wave = result['wavelength']
-                print(name, wave)
                 flux = data[idx]
                 fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
 
