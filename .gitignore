@@ -110,8 +110,5 @@ files/*_cal.fits
 files/*_x1d.fits
 files/*_calints.fits
 files/*_x1dints.fits
-<<<<<<< HEAD
 notebooks/*.fits
-=======
->>>>>>> 926a6a21f365e7cbb8cf44df5fc437841ed55cfb
 
