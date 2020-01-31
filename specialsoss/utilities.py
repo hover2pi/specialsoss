@@ -114,7 +114,7 @@ def test_simulations():
             for subarr in ['SUBSTRIP96', 'SUBSTRIP256']:
 
                 tso = BlackbodyTSO(nints=2, ngrps=2, subarray=subarr, filter=filt)
-                tso.export(os.path.join(path, '{}_{}_ramp.fits'.format(subarr, filt)))
+                tso.export(os.path.join(path, '{}_{}_uncal.fits'.format(subarr, filt)))
 
     except ImportError:
         print("Please install awesimsoss to generate test simulations.")
