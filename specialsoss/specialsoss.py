@@ -147,7 +147,6 @@ class SossExposure(object):
                 print("'{}' method not used for extraction. Skipping.".format(name))
 
             else:
-
                 # Get the data dictionary and color
                 result = self.results[name]
                 color = next(colors)
@@ -155,6 +154,7 @@ class SossExposure(object):
                 # Draw the figure
                 data = result[dtype]
                 wave = result['wavelength']
+                print(name, wave)
                 flux = data[idx]
                 fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
 
@@ -225,7 +225,7 @@ class SossExposure(object):
             raise ValueError("No '{}' data to extract.".format(ext))
 
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)
+        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)['final']
         result['method'] = method
 
         # Add the results to the table
@@ -350,7 +350,7 @@ class SossExposure(object):
         else:
             return fig
 
-    def plot_results(self, dtype='flux', name=None, time_fmt='mjd', draw=True):
+    def plot_results(self, name=None, dtype='flux', time_fmt='mjd', draw=True):
         """
         Plot results of all integrations for the given extraction routine
 
@@ -358,6 +358,8 @@ class SossExposure(object):
         ----------
         name: str (optional)
             The name of the extracted data to plot
+        dtype: str
+            The data type to plot, ['flux', 'counts']
         time_fmt: str
             The astropy time format to use
         draw: bool

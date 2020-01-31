@@ -178,7 +178,7 @@ class SossFile:
 
             # Determine the time axis given datetime and frame time
             time_str = '{} {}'.format(self.header['DATE-OBS'], self.header['TIME-OBS'])
-            starttime = datetime.strptime(time_str, "%m/%d/%Y %H:%M:%S")
+            starttime = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
             dt = timedelta(seconds=self.frame_time)
             self.time = Time(starttime + dt*np.arange(self.nframes))
 

@@ -110,4 +110,5 @@ files/*_cal.fits
 files/*_x1d.fits
 files/*_calints.fits
 files/*_x1dints.fits
+notebooks/*.fits
 
