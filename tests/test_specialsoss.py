@@ -61,6 +61,7 @@ class TestSossExposure(unittest.TestCase):
         """Test the decontaminate method works"""
         # Make CLEAR obs
         clear = specialsoss.SossExposure(self.rateints)
+        clear.extract()
 
         # Make F277W obs
         f277w = specialsoss.SossExposure(self.rateints)
@@ -72,12 +73,12 @@ class TestSossExposure(unittest.TestCase):
         # Fail if obs2.filter is not F277W
         self.assertRaises(ValueError, clear.decontaminate, clear)
 
-        # Fail if obs1.fiter is not CLEAR
-        self.assertRaises(ValueError, f277w.decontaminate, f277w)
-
         # Fail if obs2 is not extracted
         self.assertRaises(ValueError, clear.decontaminate, f277w)
         f277w.extract()
+
+        # Fail if obs1.fiter is not CLEAR
+        self.assertRaises(ValueError, f277w.decontaminate, f277w)
 
         # Run decontaminate
         clear.decontaminate(f277w)
@@ -118,7 +119,7 @@ class TestSossExposure(unittest.TestCase):
         self.assertRaises(ValueError, clear.plot_results, name='FOO', draw=True)
 
         # Bad dtype
-        elf.assertRaises(ValueError, clear.plot_results, dtype='FOO', draw=True)
+        self.assertRaises(ValueError, clear.plot_results, dtype='FOO', draw=True)
 
         # Test comparison plot
         fig = clear.compare_results(dtype='counts', draw=False)
