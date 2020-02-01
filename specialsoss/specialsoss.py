@@ -223,7 +223,7 @@ class SossExposure(object):
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         # Set the extraction function
-        func = bn.extract if method == "bin" else sm.extract if method == "sum"
+        func = bn.extract if method == "bin" else sm.extract
 
         # Get the requested data
         fileobj = getattr(self, ext)
