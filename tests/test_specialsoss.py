@@ -79,10 +79,6 @@ class TestSossExposure(unittest.TestCase):
         # Fail if obs1.fiter is not CLEAR
         self.assertRaises(ValueError, f277w.decontaminate, f277w)
 
-        # Fail if obs1 is not extracted
-        self.assertRaises(ValueError, clear.decontaminate, f277w)
-        clear.extract()
-
         # Fail if obs2 is not extracted
         self.assertRaises(ValueError, clear.decontaminate, f277w)
         f277w.extract()
@@ -109,6 +105,11 @@ class TestSossExposure(unittest.TestCase):
         """Test the plots work"""
         # Make CLEAR obs
         clear = specialsoss.SossExposure(self.uncal)
+
+        # No results
+        clear.plot_results()
+
+        # Extract some results
         clear.extract('sum', 'uncal')
 
         # Test plot_frames

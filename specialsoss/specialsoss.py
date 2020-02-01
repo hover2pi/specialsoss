@@ -3,7 +3,7 @@
 """A module to perform optimal spectral extraction of SOSS time series observations"""
 
 import copy
-from functools import partial
+from functools import partial, wraps
 from multiprocessing.dummy import Pool as ThreadPool
 from pkg_resources import resource_filename
 import os
@@ -22,6 +22,20 @@ from . import reconstruction as rc
 from . import summation as sm
 from . import binning as bn
 from . import sossfile as sf
+
+
+def results_required(func):
+    """A wrapper to check that the extraction has been run before a method can be executed"""
+    @wraps(func)
+    def _results_required(*args, **kwargs):
+        """Check that the 'results' dictionary is not empty"""
+        if not bool(args[0].results):
+            print("No extraction found! Please run the 'extract' method first.")
+
+        else:
+            return func(*args, **kwargs)
+
+    return _results_required
 
 
 class SossExposure(object):
@@ -107,6 +121,7 @@ class SossExposure(object):
         for level, file in new_files.items():
             self.load_file(file)
 
+    @results_required
     def compare_results(self, idx=0, dtype='flux', names=None, order=None, draw=True):
         """
         Compare results of multiple extraction routines for a given frame
@@ -164,6 +179,7 @@ class SossExposure(object):
             else:
                 return fig
 
+    @results_required
     def decontaminate(self, f277w_exposure):
         """
         Decontaminate the GR700XD+CLEAR orders with GR700XD+F277W order 1
@@ -185,10 +201,6 @@ class SossExposure(object):
         new_filt = f277w_exposure.filter
         if new_filt != 'F277W':
             raise ValueError("filter = {}: Only an F277W exposure can be used for decontamination".format(new_filt))
-
-        # Check that spectral extraction has been run on the CLEAR exposure
-        if not bool(self.results):
-            raise ValueError("Please run 'extract' method on CLEAR exposure before decontamination")
 
         # Check that spectral extraction has been run on the F277W exposure
         if not bool(f277w_exposure.results):
@@ -350,6 +362,7 @@ class SossExposure(object):
         else:
             return fig
 
+    @results_required
     def plot_results(self, name=None, dtype='flux', time_fmt='mjd', draw=True):
         """
         Plot results of all integrations for the given extraction routine
@@ -365,32 +378,26 @@ class SossExposure(object):
         draw: bool
             Draw the figure instead of returning it
         """
-        if len(self.results) == 0:
-            fig = None
-            print("No results to plot. Please run `extract` method to generate some.")
+        # Check dtype
+        dtypes = ['flux', 'counts']
+        if dtype not in dtypes:
+            raise ValueError("{}: Please select dtype from {}".format(dtype, dtypes))
 
-        else:
+        # Select the extractions
+        fig = None
+        if name is None:
+            name = list(self.results.keys())[0]
 
-            # Check dtype
-            dtypes = ['flux', 'counts']
-            if dtype not in dtypes:
-                raise ValueError("{}: Please select dtype from {}".format(dtype, dtypes))
+        # Get the data
+        result = self.results[name]
+        data = result[dtype]
+        wave = result['wavelength']
+        time = self.time.to_value(time_fmt)
 
-            # Select the extractions
-            fig = None
-            if name is None:
-                name = list(self.results.keys())[0]
-
-            # Get the data
-            result = self.results[name]
-            data = result[dtype]
-            wave = result['wavelength']
-            time = self.time.to_value(time_fmt)
-
-            # Draw the figure
-            x = 'Wavelength [um]'
-            y = 'Time [{}]'.format(time_fmt.upper())
-            fig = plt.plot_time_series_spectra(data, wavelength=wave, time=time, ylabel=y, xlabel=x)
+        # Draw the figure
+        x = 'Wavelength [um]'
+        y = 'Time [{}]'.format(time_fmt.upper())
+        fig = plt.plot_time_series_spectra(data, wavelength=wave, time=time, ylabel=y, xlabel=x)
 
         if draw and fig is not None:
             show(fig)
