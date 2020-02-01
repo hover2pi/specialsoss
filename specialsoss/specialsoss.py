@@ -381,13 +381,13 @@ class SossExposure(object):
             if name is None:
                 name = list(self.results.keys())[0]
 
-            # Get the data dictionary and color
+            # Get the data
             result = self.results[name]
-
-            # Draw the figure
             data = result[dtype]
             wave = result['wavelength']
             time = self.time.to_value(time_fmt)
+
+            # Draw the figure
             x = 'Wavelength [um]'
             y = 'Time [{}]'.format(time_fmt.upper())
             fig = plt.plot_time_series_spectra(data, wavelength=wave, time=time, ylabel=y, xlabel=x)
