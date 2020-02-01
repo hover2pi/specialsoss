@@ -6,10 +6,6 @@
 import unittest
 from pkg_resources import resource_filename
 
-import numpy as np
-import astropy.units as q
-import bokeh
-
 from specialsoss import specialsoss
 
 

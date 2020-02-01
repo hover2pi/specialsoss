@@ -9,7 +9,6 @@ from pkg_resources import resource_filename
 
 from astropy.io import fits
 from astropy.time import Time
-from bokeh.plotting import figure
 from hotsoss import locate_trace as lt
 from hotsoss import plotting as plt
 from hotsoss import utils

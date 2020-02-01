@@ -2,16 +2,11 @@
 
 """A module to perform optimal spectral extraction of SOSS time series observations"""
 
-import copy
-from functools import partial, wraps
-from multiprocessing.dummy import Pool as ThreadPool
-from pkg_resources import resource_filename
+from functools import wraps
 import os
+from pkg_resources import resource_filename
 
-from astropy.io import fits
-from astropy import table as at
-from bokeh.plotting import figure, show
-from bokeh.transform import linear_cmap, log_cmap
+from bokeh.plotting import show
 from hotsoss import plotting as plt
 from hotsoss import utils
 from hotsoss import locate_trace as lt

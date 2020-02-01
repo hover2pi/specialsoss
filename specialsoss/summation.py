@@ -3,7 +3,7 @@
 """A module for the 1D spectral extraction summation method"""
 
 import astropy.units as q
-from hotsoss import utils 
+from hotsoss import utils
 import numpy as np
 
 
