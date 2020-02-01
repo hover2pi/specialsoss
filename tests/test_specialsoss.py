@@ -114,8 +114,11 @@ class TestSossExposure(unittest.TestCase):
         # Test result plot
         fig = clear.plot_results(draw=False)
 
+        # Bad name
+        self.assertRaises(ValueError, clear.plot_results, name='FOO', draw=True)
+
         # Bad dtype
-        self.assertRaises(ValueError, clear.plot_results, 'FOO', draw=True)
+        elf.assertRaises(ValueError, clear.plot_results, dtype='FOO', draw=True)
 
         # Test comparison plot
         fig = clear.compare_results(dtype='counts', draw=False)

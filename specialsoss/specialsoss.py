@@ -378,10 +378,15 @@ class SossExposure(object):
         if dtype not in dtypes:
             raise ValueError("{}: Please select dtype from {}".format(dtype, dtypes))
 
+        # Check name
+        names = list(self.results.keys())
+        if name is not None and name not in names:
+            raise ValueError("{}: Name not in results. Try {}".format(name, names))
+
         # Select the extractions
         fig = None
         if name is None:
-            name = list(self.results.keys())[0]
+            name = names[0]
 
         # Get the data
         result = self.results[name]
