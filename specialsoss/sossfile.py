@@ -57,9 +57,6 @@ class SossFile:
         outdir: str
             The directory to put the calibrated files into
         """
-        # Check for the pipeline
-        from jwst.pipeline import Detector1Pipeline, Spec2Pipeline
-
         # Get config directory
         if configdir is None:
             configdir = resource_filename('specialsoss', 'files')
@@ -79,6 +76,7 @@ class SossFile:
 
             # Create Detector1Pipeline instance
             cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
+            from jwst.pipeline import Detector1Pipeline
             tso1 = Detector1Pipeline.call(self.file, save_results=True, config_file=cfg1_file, output_dir=outdir)
 
             # Calibrated files
@@ -90,6 +88,7 @@ class SossFile:
 
             # SPEC2 Pipeline
             cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
+            from jwst.pipeline import Spec2Pipeline
             tso2 = Spec2Pipeline(save_results=True, config_file=cfg2_file, output_dir=outdir)
 
             # Configure steps

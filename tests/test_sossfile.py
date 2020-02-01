@@ -28,17 +28,25 @@ class TestSossFile(unittest.TestCase):
 
     def test_calibrate(self):
         """Test calibrate method"""
-        # Calibrate uncal
         obs_uncal = sossfile.SossFile(self.uncal)
-        new_files1 = obs_uncal.calibrate()
 
-        # Calibrate rateints
-        obs_rateints = sossfile.SossFile(new_files['rateints'])
-        new_files2 = obs_rateints.calibrate()
+        # See if jwst is installed
+        try:
+            import jwst
 
-        # Try to calibrate '_ramp.fits' file but print message instead
-        obs_ramp = sossfile.SossFile(new_files1['ramp'])
-        obs_ramp.calibrate()
+            # Calibrate uncal
+            new_files1 = obs_uncal.calibrate()
+
+            # Calibrate rateints
+            obs_rateints = sossfile.SossFile(new_files['rateints'])
+            new_files2 = obs_rateints.calibrate()
+
+            # Try to calibrate '_ramp.fits' file but print message instead
+            obs_ramp = sossfile.SossFile(new_files1['ramp'])
+            obs_ramp.calibrate()
+
+        except ModuleNotFoundError:
+            self.assertRaises(ModuleNotFoundError, obs_uncal.calibrate)
 
     def test_plot(self):
         """Test plot method"""

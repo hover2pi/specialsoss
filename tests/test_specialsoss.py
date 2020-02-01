@@ -43,8 +43,13 @@ class TestSossExposure(unittest.TestCase):
         # Bad level
         self.assertRaises(ValueError, obs.calibrate, 'FOO')
 
-        # Good level
-        obs.calibrate('uncal')
+        # See if jwst is installed
+        try:
+            import jwst
+            obs.calibrate('uncal')
+
+        except ModuleNotFoundError:
+            self.assertRaises(ModuleNotFoundError, obs.calibrate, 'uncal')
 
     def test_info(self):
         """Test the info property"""
