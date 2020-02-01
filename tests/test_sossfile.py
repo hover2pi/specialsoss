@@ -23,11 +23,22 @@ class TestSossFile(unittest.TestCase):
         obs = sossfile.SossFile(self.uncal)
         obs.file = None
 
-        # rateints check
-        obs = sossfile.SossFile(self.rateints)
-
         # Test properties
         print(obs)
+
+    def test_calibrate(self):
+        """Test calibrate method"""
+        # Calibrate uncal
+        obs_uncal = sossfile.SossFile(self.uncal)
+        new_files1 = obs_uncal.calibrate()
+
+        # Calibrate rateints
+        obs_rateints = sossfile.SossFile(new_files['rateints'])
+        new_files2 = obs_rateints.calibrate()
+
+        # Try to calibrate '_ramp.fits' file but print message instead
+        obs_ramp = sossfile.SossFile(new_files1['ramp'])
+        obs_ramp.calibrate()
 
     def test_plot(self):
         """Test plot method"""

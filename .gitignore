@@ -104,11 +104,11 @@ venv.bak/
 .mypy_cache/
 
 # Pipeline processed files
-files/*_rate.fits
-files/*_ramp.fits
-files/*_cal.fits
-files/*_x1d.fits
-files/*_calints.fits
-files/*_x1dints.fits
+specialsoss/files/*_rate.fits
+specialsoss/files/*_ramp.fits
+specialsoss/files/*_cal.fits
+specialsoss/files/*_x1d.fits
+specialsoss/files/*_calints.fits
+specialsoss/files/*_x1dints.fits
 notebooks/*.fits
 

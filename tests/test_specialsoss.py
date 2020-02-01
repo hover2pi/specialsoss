@@ -36,6 +36,16 @@ class TestSossExposure(unittest.TestCase):
         self.assertEqual(obs.nrows, 256)
         self.assertEqual(obs.ncols, 2048)
 
+    def test_calibrate(self):
+        """Test calibrate method"""
+        obs = specialsoss.SossExposure(self.uncal)
+
+        # Bad level
+        self.assertRaises(ValueError, obs.calibrate, 'FOO')
+
+        # Good level
+        obs.calibrate('uncal')
+
     def test_info(self):
         """Test the info property"""
         obs = specialsoss.SossExposure(self.uncal)
