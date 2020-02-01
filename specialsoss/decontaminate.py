@@ -2,10 +2,6 @@
 
 """A module to correct GR700XD+CLEAR time series observations using GR700XD+F277W observations"""
 
-from copy import copy
-
-import numpy as np
-
 
 def decontaminate(clear_data, f277w_data):
     """

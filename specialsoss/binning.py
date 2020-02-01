@@ -39,6 +39,9 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
     wavelengths = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray='SUBSTRIP256')
     wavebins = lt.wavelength_bins(subarray=subarray)
 
+    # Get number of frames
+    nframes = data.shape[0]
+
     # Load the pixel masks
     if pixel_masks is None:
         pixel_masks = np.ones((2, data.shape[-2], data.shape[-1]))
@@ -53,24 +56,33 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
         flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
 
         # TODO: Get the uncertainty
-        unc = np.random.normal(loc=flux*0.01)
-
-        # Make into an array for easy combining
-        spectrum = np.array([wavelength, flux, unc])
+        unc = np.random.normal(loc=flux, scale=flux*0.01)
 
         # Make arrays into monotonically increasing arrays
-        idx = spectrum[0].argsort()
-        spectrum = spectrum[:, idx]
-        counts = counts[idx]
-        wavelength, flux, unc = spectrum
+        idx = wavelength.argsort()
+        wave = wavelength[idx]
+        flux = flux[:, idx]
+        unc = unc[:, idx]
+        counts = counts[:, idx]
 
         # Add result to the dictionary
         name = 'order{}'.format(n+1)
-        results[name] = {'counts': counts, 'flux': flux, 'unc': unc, 'wavelength': wavelength, 'filter': filt, 'subarray': subarray}
+        results[name] = {'counts': counts, 'flux': flux, 'unc': unc, 'wavelength': wave, 'filter': filt, 'subarray': subarray}
 
     # Combine the order 1 and 2 spectra
-    combined = combine_spectra(results['order1']['spectrum'], results['order2']['spectrum'])
-    results['final'] = {'flux': combined[1], 'wavelength': combined[0], 'unc': combined[2], 'filter': filt, 'subarray': subarray}
+    combined = []
+    for n in range(nframes):
+        spec1 = np.array([results['order1']['wavelength'], results['order1']['flux'][n], results['order1']['unc'][n]])
+        spec2 = np.array([results['order2']['wavelength'], results['order2']['flux'][n], results['order2']['unc'][n]])
+        print(spec1, spec2)
+        spec3 = combine_spectra(spec1, spec2)
+        combined.append(spec3)
+
+    # Concatenate results and add to results
+    wave_final = combined[0][0]
+    flux_final = np.array([c[1] for c in combined])
+    unc_final = np.array([c[2] for c in combined])
+    results['final'] = {'wavelength': wave_final, 'counts': counts, 'flux': flux_final, 'unc': unc_final, 'filter': filt, 'subarray': subarray}
 
     return results
 
