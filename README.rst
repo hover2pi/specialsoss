@@ -53,8 +53,8 @@ the only required input. To load your SOSS exposure, simply do
    from pkg_resources import resource_filename
 
    # Load the exposure
-   file = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_ramp.fits')
-   obs = SossExposure(file, calibrate=False)
+   file = resource_filename('specialsoss', 'files/SUBSTRIP256_CLEAR_uncal.fits')
+   obs = SossExposure(file)
 
 Now we can scroll through the ingested data by plotting the frames.
 
@@ -71,10 +71,10 @@ use the vanilla column sum extraction.
 
 .. code:: python
 
-   obs.extract('sum')
+   obs.extract('sum', 'uncal')
 
 Finally, we can see the extracted time-series spectra and the monochromatic lightcurves with:
 
 .. code:: python
 
-   obs.plot_time_series_spectra()
+   obs.plot_results()
