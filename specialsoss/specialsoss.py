@@ -13,7 +13,6 @@ from hotsoss import locate_trace as lt
 import numpy as np
 
 from . import decontaminate as dec
-from . import reconstruction as rc
 from . import summation as sm
 from . import binning as bn
 from . import sossfile as sf
@@ -212,19 +211,19 @@ class SossExposure(object):
         Parameters
         ----------
         method: str
-            The extraction method to use, ["reconstruct", "bin", "sum"]
+            The extraction method to use, ["bin", "sum"]
         ext: str
             The extension to extract
         name: str
             A name for the extraction results
         """
         # Validate the method
-        valid_methods = ["reconstruct", "bin", "sum"]
+        valid_methods = ["bin", "sum"]
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         # Set the extraction function
-        func = bn.extract if method == "bin" else sm.extract if method == "sum" else rc.extract
+        func = bn.extract if method == "bin" else sm.extract if method == "sum"
 
         # Get the requested data
         fileobj = getattr(self, ext)
