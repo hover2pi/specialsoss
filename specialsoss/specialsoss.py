@@ -2,68 +2,86 @@
 
 """A module to perform optimal spectral extraction of SOSS time series observations"""
 
-import copy
-from functools import partial
-from multiprocessing.dummy import Pool as ThreadPool
-from pkg_resources import resource_filename
+from functools import wraps
 import os
+from pkg_resources import resource_filename
 
-from astropy.io import fits
-from astropy import table as at
-from bokeh.plotting import figure, show
-from bokeh.transform import linear_cmap, log_cmap
+from bokeh.plotting import show
 from hotsoss import plotting as plt
 from hotsoss import utils
 from hotsoss import locate_trace as lt
 import numpy as np
 
 from . import decontaminate as dec
-from . import reconstruction as rc
 from . import summation as sm
 from . import binning as bn
+from . import sossfile as sf
+
+
+def results_required(func):
+    """A wrapper to check that the extraction has been run before a method can be executed"""
+    @wraps(func)
+    def _results_required(*args, **kwargs):
+        """Check that the 'results' dictionary is not empty"""
+        if not bool(args[0].results):
+            print("No extraction found! Please run the 'extract' method first.")
+
+        else:
+            return func(*args, **kwargs)
+
+    return _results_required
 
 
 class SossExposure(object):
     """
     A class object to load a SOSS exposure file and extract and manipulate spectra
     """
-    def __init__(self, filepath, name='My SOSS Observations', calibrate=True, **kwargs):
+    def __init__(self, filepath, name='My SOSS Observations', **kwargs):
         """
         Initialize the SOSS extraction object
 
         Parameters
         ----------
         filepath: str
-            The path to the SOSS data
+            The path to the SOSS data, which must end with '_<ext>.fits',
+            where 'ext' is ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
         name: str
-            The name of the observation set
-        calibrate: bool
-            Pipeline process the input file
+            The name of the exposure set
         """
         # Make sure the file exists
-        if not os.path.exists(filepath) or not filepath.endswith('.fits'):
+        if not os.path.exists(filepath):
             raise FileNotFoundError("{}: Invalid file".format(filepath))
 
         # Store attributes
         self.name = name
-        self.filepath = filepath
         self.time = None
 
-        # Pipeline process
-        if calibrate:
-            self.filepath = self._pipeline_process(filepath)
+        # Store empty SossFile objects
+        self.uncal = sf.SossFile()  # 4D Uncalibrated raw input
+        self.ramp = sf.SossFile() # 4D Corrected ramp data
+        self.rate = sf.SossFile() # 2D Corrected countrate image
+        self.rateints = sf.SossFile() # 3D Corrected countrate per integration
+        self.calints = sf.SossFile() # 3D Calibrated data
+        self.x1dints = sf.SossFile() # 1D Extracted spectra
+
+        # Reset file levels
+        self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
 
         # Load the file
-        self.load_file(self.filepath)
+        self.load_file(filepath)
 
-        # Load the wavelength calibration file
+        # Load the order throughput, wavelength calibration, and order mask files
         self.load_filters()
-        self.load_wavecal()
+        self.order_masks = lt.order_masks(self.median)
 
         # Dictionary for the extracted spectra
-        self.extracted = {}
+        self.results = {}
 
-    def caluclate_order_masks(self):
+        # Print uncal warning
+        if self.uncal.file is not None:
+            print("Looks like you have initialized an 'uncal' file! To pipeline process it, run 'SossExposure.uncal.calibrate()' method.")
+
+    def calculate_order_masks(self):
         """
         Calculate the order masks from the median image
         """
@@ -72,254 +90,35 @@ class SossExposure(object):
 
         print("New order masks calculated from median image.")
 
-    def decontaminate(self, f277w_exposure):
+    def calibrate(self, ext='uncal', configdir=None, outdir=None, **kwargs):
         """
-        Decontaminate the GR700XD+CLEAR orders with GR700XD+F277W order 1
+        Pipeline process a file in the exposure object
 
         Parameters
         ----------
-        f277w_exposure: SossExposure
-            The F277W exposure object
+        ext: str
+            The extension to calibrate
+        configdir: str
+            The directory containing the configuration files
+        outdir: str
+            The directory to put the calibrated files into
         """
-        # Check that the current filter is CLEAR
-        if not self.filter == 'CLEAR':
-            raise ValueError("filter = {}: Only a CLEAR exposure can be decontaminated".format(self.filter))
+        if ext not in self.levels:
+            raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
 
-        # Check the dtype
-        if not isinstance(f277w_exposure, type(self)):
-            raise TypeError("{}: f277w_exposure must be of type {}".format(type(f277w_exposure), type(self)))
+        # Plot the appropriate file
+        fileobj = getattr(self, ext)
+        if fileobj.file is not None:
+            new_files = fileobj.calibrate(configdir=configdir, outdir=outdir, **kwargs)
 
-        # Check that the new filter is F277W
-        new_filt = f277w_exposure.filter
-        if new_filt != 'F277W':
-            raise ValueError("filter = {}: Only an F277W exposure can be used for decontamination".format(new_filt))
+        # Load the calibrated files
+        for level, file in new_files.items():
+            self.load_file(file)
 
-        # Check that spectral extraction has been run on the CLEAR exposure
-        if not bool(self.extracted):
-            raise ValueError("Please run 'extract' method on CLEAR exposure before decontamination")
-
-        # Check that spectral extraction has been run on the F277W exposure
-        if not bool(f277w_exposure.extracted):
-            raise ValueError("Please run 'extract' method on F277W exposure before decontamination")
-
-        # Run the decontamination
-        self.extracted = dec.decontaminate(self.extracted, f277w_exposure.extracted)
-
-    def extract(self, method="sum", name=None, **kwargs):
+    @results_required
+    def compare_results(self, idx=0, dtype='flux', names=None, order=None, draw=True):
         """
-        Extract the 1D spectra from the time series data
-        using the specified method
-
-        Parameters
-        ----------
-        method: str
-            The extraction method to use, ["reconstruct", "bin", "sum"]
-        """
-        # Validate the method
-        valid_methods = ["reconstruct", "bin", "sum"]
-        if method not in valid_methods:
-            raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
-
-        # Set the extraction function
-        func = bn.extract if method == "bin" else sm.extract if method == "sum" else rc.extract
-
-        # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(self.data, filt=self.filter, subarray=self.subarray, **kwargs)
-        result['method'] = method
-
-        # Add the results to the table
-        if name is None:
-            name = method
-        self.extracted[name] = result
-
-    def _get_frame(self, idx=None):
-        """
-        Retrieve some frame data
-
-        Parameters
-        ----------
-        idx: int
-            The index of the frame to retrieve
-        """
-        if isinstance(idx, int):
-            dim = self.data.shape
-            if self.data.ndim == 4:
-                frame = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])[idx]
-            else:
-                frame = self.data[idx]
-        else:
-            frame = self.median
-
-        return frame
-
-    @property
-    def info(self):
-        """Return some info about the observation"""
-        # Pull out relevant attributes
-        track = ['ncols', 'nrows', 'nints', 'ngrps', 'subarray', 'filter']
-        settings = {key: val for key, val in self.__dict__.items() if key in track}
-        return settings
-
-    def load_file(self, filepath, **kwargs):
-        """
-        Load the data and headers from an observation file
-
-        Parameters
-        ----------
-        filepath: str
-            The path to the SOSS data
-        """
-        # Make sure the file exists
-        if not os.path.exists(filepath) or not filepath.endswith('.fits'):
-            raise IOError(filepath, ": Invalid file")
-
-        # Get the data
-        self.raw_data = fits.getdata(filepath, **kwargs)
-        self.header = fits.getheader(filepath)
-
-        # Glean configuration info
-        self.nints = self.header['NINTS']
-        self.ngrps = self.header['NGROUPS']
-        self.nrows = self.header['SUBSIZE2']
-        self.ncols = self.header['SUBSIZE1']
-        self.filter = self.header['FILTER']
-        self.subarray = 'FULL' if self.nrows == 2048 else 'SUBSTRIP96' if self.nrows == 96 else 'SUBSTRIP256'
-
-        # Ensure data is in 4 dimensions
-        self.data = copy.copy(self.raw_data)
-        if self.data.ndim == 3:
-            self.data.shape = (self.nints, self.ngrps, self.nrows, self.ncols)
-        if self.data.ndim != 4:
-            raise ValueError("Data dimensions must be 3 or 4. {} is not valid.". format(self.raw_data.ndim))
-
-        # Compose a median image from the stack
-        self.median = np.median(self.data, axis=(0, 1))
-
-        # Load the default order masks
-        self.order_masks = lt.order_masks(self.median)
-
-    def load_filters(self):
-        """
-        Load the wavelength bins for orders 1, 2, and 3
-        """
-        self.filters = []
-
-        # Pull out the throughput for the appropriate order
-        for ord in [1, 2, 3]:
-            file = resource_filename('hotsoss', 'files/GR700XD_{}.txt'.format(ord))
-            if os.path.isfile(file):
-                self.filters.append(np.genfromtxt(file, unpack=True))
-
-    def load_wavecal(self, file=None):
-        """
-        Load the wavelength calibration for orders 1, 2, and 3
-
-        Parameters
-        ----------
-        file: str (optional)
-            The path to a custom wavelength calibration file
-        """
-        # Load wavelength calibration file
-        self.wavecal = utils.wave_solutions(subarray=self.subarray, file=file)
-
-    @staticmethod
-    def _pipeline_process(uncal_file, configdir=resource_filename('specialsoss', 'files/calwebb_tso1.cfg'), outdir=None):
-        """
-        Run the file through the JWST pipeline, storing the data and header
-        """
-        # Check for the pipeline
-        try:
-
-            if outdir is None:
-                outdir = os.path.dirname(uncal_file)
-
-            # Run the pipeline
-            from jwst.pipeline import Detector1Pipeline
-            tso1 = Detector1Pipeline.call(uncal_file, save_results=True, config_file=configdir, output_dir=outdir)
-            processed = uncal_file.replace('.fits', '_ramp.fits')
-
-            return processed
-
-        except ImportError:
-            print("Could not import JWST pipeline. {} has not been processed.".format(file))
-
-    def plot_frame(self, idx=None, scale='linear', draw=True, **kwargs):
-        """
-        Plot a single frame of the data
-
-        Parameters
-        ----------
-        idx: int
-            The index of the frame to plot
-        """
-        # Get the data
-        frame = self._get_frame(idx)
-
-        # Make the figure
-        title = '{}: Frame {}'.format(self.name, idx if idx is not None else 'Median')
-        coeffs = lt.trace_polynomial()
-        fig = plt.plot_frame(frame, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
-
-        if draw:
-            show(fig)
-        else:
-            return fig
-
-    def plot_frames(self, idx=0, scale='linear', draw=True, **kwargs):
-        """
-        Plot a single frame of the data
-
-        Parameters
-        ----------
-        idx: int
-            The index of the frame to plot
-        """
-        # Reshape the data
-        dim = self.data.shape
-        data = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])
-
-        # Make the figure
-        title = '{}: Frames'.format(self.name)
-        coeffs = lt.trace_polynomial()
-        fig = plt.plot_frames(data, idx=idx, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
-
-        if draw:
-            show(fig)
-        else:
-            return fig
-
-
-    def plot_extracted_spectra(self, name=None, draw=True):
-        """
-        Plot the extracted 1D spectra
-
-        Parameters
-        ----------
-        name: str (optional)
-            The name of the extracted data
-        """
-        # Select the extractions
-        fig = None
-        if name is None:
-            name = self.extracted.keys()[0]
-
-        # Get the data dictionary and color
-        result = self.extracted[name]
-
-        # Draw the figure
-        counts = result['order1']['counts']
-        flux = result['order1']['flux']
-        wave = result['order1']['wavelength']
-        fig = plt.plot_time_series_spectra(wave=wave, flux=flux)
-
-        if draw:
-            show(fig)
-        else:
-            return fig
-
-    def plot_spectra(self, idx=0, dtype='flux', names=None, order=None, draw=True):
-        """
-        Plot the extracted 1D spectrum
+        Compare results of multiple extraction routines for a given frame
 
         Parameters
         ----------
@@ -349,28 +148,24 @@ class SossExposure(object):
         # Select the extractions
         fig = None
         if names is None:
-            names = self.extracted.keys()
+            names = self.results.keys()
 
         for name in names:
 
-            if name not in self.extracted:
+            if name not in self.results:
                 print("'{}' method not used for extraction. Skipping.".format(name))
 
             else:
 
                 # Get the data dictionary and color
-                result = self.extracted[name]
+                result = self.results[name]
                 color = next(colors)
 
                 # Draw the figure
-                for order in orders:
-                    key = 'order{}'.format(order)
-                    if key in result:
-                        legend = ' - '.join([key, name])
-                        data = result[key][dtype]
-                        wave = result[key]['wavelength']
-                        flux = data[idx]
-                        fig = plt.plot_spectrum(wave, flux, fig=fig, legend=legend, ylabel=ylabel, color=color, alpha=1./order)
+                data = result[dtype]
+                wave = result['wavelength']
+                flux = data[idx]
+                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
 
         if fig is not None:
             if draw:
@@ -378,46 +173,256 @@ class SossExposure(object):
             else:
                 return fig
 
-    def plot_ramp(self, draw=True):
+    @results_required
+    def decontaminate(self, f277w_exposure):
         """
-        Plot the total flux on each frame to display the ramp
+        Decontaminate the GR700XD+CLEAR orders with GR700XD+F277W order 1
+
+        Parameters
+        ----------
+        f277w_exposure: SossExposure
+            The F277W exposure object
         """
-        fig = plt.plot_ramp(self.data)
+        # Check that the current filter is CLEAR
+        if not self.filter == 'CLEAR':
+            raise ValueError("filter = {}: Only a CLEAR exposure can be decontaminated".format(self.filter))
+
+        # Check the dtype
+        if not isinstance(f277w_exposure, type(self)):
+            raise TypeError("{}: f277w_exposure must be of type {}".format(type(f277w_exposure), type(self)))
+
+        # Check that the new filter is F277W
+        new_filt = f277w_exposure.filter
+        if new_filt != 'F277W':
+            raise ValueError("filter = {}: Only an F277W exposure can be used for decontamination".format(new_filt))
+
+        # Check that spectral extraction has been run on the F277W exposure
+        if not bool(f277w_exposure.results):
+            raise ValueError("Please run 'extract' method on F277W exposure before decontamination")
+
+        # Run the decontamination
+        self.results = dec.decontaminate(self.results, f277w_exposure.results)
+
+    def extract(self, method="sum", ext='rateints', name=None, **kwargs):
+        """
+        Extract the 1D spectra from the time series data
+        using the specified method
+
+        Parameters
+        ----------
+        method: str
+            The extraction method to use, ["bin", "sum"]
+        ext: str
+            The extension to extract
+        name: str
+            A name for the extraction results
+        """
+        # Validate the method
+        valid_methods = ["bin", "sum"]
+        if method not in valid_methods:
+            raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
+
+        # Set the extraction function
+        func = bn.extract if method == "bin" else sm.extract
+
+        # Get the requested data
+        fileobj = getattr(self, ext)
+        if fileobj.data is None:
+            raise ValueError("No '{}' data to extract.".format(ext))
+
+        # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
+        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)['final']
+        result['method'] = method
+
+        # Add the results to the table
+        if name is None:
+            name = method
+        self.results[name] = result
+
+    def _get_extension(self, ext, err=True):
+        """
+        Get the data for the given extension
+
+        Parameters
+        ----------
+        ext: str
+            The name of the extension
+        err: bool
+            Throw an error instead of printing
+        """
+        # Check the level is valid
+        if ext not in self.levels:
+            raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
+
+        # Get the data from the appropriate file
+        fileobj = getattr(self, ext)
+        if fileobj.file is None:
+            loaded = [level for level in self.levels if getattr(self, level).file is not None]
+            msg = "No data for '{0}' extension. Load `_{0}.fits' file or try {1}".format(ext, loaded)
+
+            if err:
+                raise ValueError(msg)
+            else:
+                print(msg)
+
+        else:
+            return fileobj
+
+    @property
+    def info(self):
+        """Return some info about the observation"""
+        # Pull out relevant attributes
+        track = ['ncols', 'nrows', 'nints', 'ngrps', 'subarray', 'filter']
+        settings = {key: val for key, val in self.__dict__.items() if key in track}
+
+        # Get file info
+        for level in self.levels:
+            fileobj = getattr(self, level)
+            file = None if fileobj is None else fileobj.file
+            settings.update({level: file})
+
+        return settings
+
+    def load_file(self, filepath, **kwargs):
+        """
+        Load the data and headers from an observation file
+
+        Parameters
+        ----------
+        filepath: str
+            The path to the SOSS data
+        """
+        # Make sure the file exists
+        if not os.path.exists(filepath):
+            raise IOError("{} : Invalid file".format(filepath))
+
+        # Determine processing level of input file
+        if not any([filepath.endswith('_{}.fits'.format(level)) for level in self.levels]):
+            raise ValueError('Not a recognized JWST file extension. Please use {}'.format(self.levels))
+
+        # Save the filepath
+        ext = filepath.split('_')[-1][:-5]
+        fileobj = sf.SossFile(filepath)
+        setattr(self, ext, fileobj)
+
+        # Load the attributes
+        self.nints = fileobj.nints
+        self.ngrps = fileobj.ngrps
+        self.nframes = fileobj.nframes
+        self.nrows = fileobj.nrows
+        self.ncols = fileobj.ncols
+        self.filter = fileobj.filter
+        self.frame_time = fileobj.frame_time
+        self.subarray = fileobj.subarray
+        self.wavecal = fileobj.wavecal
+        self.median = fileobj.median
+        self.time = fileobj.time
+
+        print("'{}' file loaded from {}".format(ext, filepath))
+
+    def load_filters(self):
+        """
+        Load the wavelength bins for orders 1, 2, and 3
+        """
+        self.filters = []
+
+        # Pull out the throughput for the appropriate order
+        for ord in [1, 2, 3]:
+            file = resource_filename('hotsoss', 'files/GR700XD_{}.txt'.format(ord))
+            if os.path.isfile(file):
+                self.filters.append(np.genfromtxt(file, unpack=True))
+
+    def plot_frames(self, ext='uncal', scale='linear', draw=True, **kwargs):
+        """
+        Plot a frame or all frames of any image data
+
+        Parameters
+        ----------
+        ext: str
+            The extension to plot
+        idx: int
+            The index of the frame to plot
+        draw: bool
+            Draw the figure instead of returning it
+        """
+        # Get the file object
+        fileobj = self._get_extension(ext)
+
+        # Make the plot
+        fig = fileobj.plot(scale=scale)
 
         if draw:
             show(fig)
         else:
             return fig
 
-
-class RealExposure(SossExposure):
-    """
-    A test instance with CV3 data loaded
-    """
-    def __init__(self, **kwargs):
+    @results_required
+    def plot_results(self, name=None, dtype='flux', time_fmt='mjd', draw=True):
         """
-        Initialize the object
-        """
-        # Get the file
-        file = resource_filename('specialsoss', 'files/SUBSTRIP256_CV3.fits')
+        Plot results of all integrations for the given extraction routine
 
-        # Inherit from SossObs
-        super().__init__(file, name='CV3 Observation', **kwargs)
+        Parameters
+        ----------
+        name: str (optional)
+            The name of the extracted data to plot
+        dtype: str
+            The data type to plot, ['flux', 'counts']
+        time_fmt: str
+            The astropy time format to use
+        draw: bool
+            Draw the figure instead of returning it
+        """
+        # Check dtype
+        dtypes = ['flux', 'counts']
+        if dtype not in dtypes:
+            raise ValueError("{}: Please select dtype from {}".format(dtype, dtypes))
+
+        # Check name
+        names = list(self.results.keys())
+        if name is not None and name not in names:
+            raise ValueError("{}: Name not in results. Try {}".format(name, names))
+
+        # Select the extractions
+        fig = None
+        if name is None:
+            name = names[0]
+
+        # Get the data
+        result = self.results[name]
+        data = result[dtype]
+        wave = result['wavelength']
+        time = self.time.to_value(time_fmt)
+
+        # Draw the figure
+        x = 'Wavelength [um]'
+        y = 'Time [{}]'.format(time_fmt.upper())
+        fig = plt.plot_time_series_spectra(data, wavelength=wave, time=time, ylabel=y, xlabel=x)
+
+        if draw and fig is not None:
+            show(fig)
+        else:
+            return fig
 
 
 class SimExposure(SossExposure):
     """
     A test instance with the data preloaded
     """
-    def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', calibrate=True, **kwargs):
+    def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', level='uncal', **kwargs):
         """
-        Initialize the object
-        """
-        # To calibrate or not to calibrate
-        ext = 'ramp' if calibrate else 'uncal'
+        Initialize the SOSS extraction object
 
+        Parameters
+        ----------
+        subarray: str
+            The desired subarray, ['SUBSTRIP96', 'SUBSTRIP256', 'FULL']
+        filt: str
+            The desired filter, ['CLEAR', 'F277W']
+        level: str
+            The desired level of pipeline processing, ['uncal', 'ramp']
+        """
         # Get the file
-        file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, ext))
+        file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, level))
 
         # Inherit from SossObs
-        super().__init__(file, name='Simulated Observation', calibrate=False, **kwargs)
+        super().__init__(file, name='Simulated Observation', **kwargs)
