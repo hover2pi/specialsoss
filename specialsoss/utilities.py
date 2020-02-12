@@ -118,3 +118,39 @@ def test_simulations():
 
     except ImportError:
         print("Please install awesimsoss to generate test simulations.")
+
+
+def nan_reference_pixels(data):
+    """
+    Convert reference pixels in SOSS data to NaN values
+    """
+    # Get the data shape
+    dims = data.shape
+
+    # Convert to 3D
+    if data.ndim == 4:
+        data = data.reshape((dims[0]*dims[1], dims[2], dims[3]))
+    elif data.ndim == 3:
+        pass
+    elif data.ndim == 2:
+        data = data[None, :, :]
+    else:
+        raise ValueError("{}: Data must be in 2, 3, or 4 dimensions.".format(dims))
+
+    # Left, right (all subarrays)
+    if dims[-1] == 2048:
+        data[:, :, :4] = np.nan
+        data[:, :, -4:] = np.nan
+
+    # Top (excluding SUBSTRIP96)
+    if dims[-2] in [256, 2048]:
+        data[:, -4:, :] = np.nan
+
+    # Bottom (Only FULL frame)
+    if dims[-2] == 2048:
+        data[:, :4, :] = np.nan
+
+    # Return to original shape
+    data = data.reshape(dims)
+
+    return data
