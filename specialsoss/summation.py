@@ -6,6 +6,8 @@ import astropy.units as q
 from hotsoss import utils
 import numpy as np
 
+from . import utilities as u
+
 
 def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
@@ -31,17 +33,8 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     if data.ndim == 4:
         data = data.reshape((data.shape[0]*data.shape[1], data.shape[2], data.shape[3]))
 
-    # Trim reference pixels
-    # Left, right (all subarrays)
-    data = data[:, :, 4:-4]
-
-    # Top (excluding SUBSTRIP96)
-    if subarray != 'SUBSTRIP96':
-        data = data[:, :-4, :]
-
-    # Bottom (Only FULL frame)
-    if subarray == 'FULL':
-        data = data[:, 4:, :]
+    # NaN reference pixels
+    data = u.nan_reference_pixels(data)
 
     # Get total counts in each pixel column
     counts = np.nansum(data, axis=1)
@@ -50,7 +43,7 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     wavemap = utils.wave_solutions(subarray=subarray, order=1, **kwargs)
 
     # Get mean wavelength in each column
-    wavelength = np.nanmean(wavemap, axis=0)[4:-4]
+    wavelength = np.nanmean(wavemap, axis=0)
 
     # Convert to flux using first order response
     flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=1, units=units, **kwargs)

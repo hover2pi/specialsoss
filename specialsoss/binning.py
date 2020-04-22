@@ -74,7 +74,6 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
     for n in range(nframes):
         spec1 = np.array([results['order1']['wavelength'], results['order1']['flux'][n], results['order1']['unc'][n]])
         spec2 = np.array([results['order2']['wavelength'], results['order2']['flux'][n], results['order2']['unc'][n]])
-        print(spec1, spec2)
         spec3 = combine_spectra(spec1, spec2)
         combined.append(spec3)
 

@@ -24,6 +24,12 @@ def combine_spectra(s1, s2):
     sequence
         The [W, F, E] of the combined spectrum
     """
+    # Remove NaN and zero wavelengths
+    idx1 = np.where(s1[0] > 0.)[0]
+    idx2 = np.where(s2[0] > 0.)[0]
+    s1 = np.array([i[idx1] for i in s1])
+    s2 = np.array([i[idx2] for i in s2])
+
     # Determine if overlapping
     overlap = True
     try:

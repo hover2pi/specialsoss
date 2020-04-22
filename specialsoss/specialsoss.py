@@ -15,6 +15,7 @@ import numpy as np
 from . import decontaminate as dec
 from . import summation as sm
 from . import binning as bn
+from . import jetspec as jc
 from . import sossfile as sf
 
 
@@ -218,12 +219,12 @@ class SossExposure(object):
             A name for the extraction results
         """
         # Validate the method
-        valid_methods = ["bin", "sum"]
+        valid_methods = ["bin", "sum", "jetspec"]
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         # Set the extraction function
-        func = bn.extract if method == "bin" else sm.extract
+        func = bn.extract if method == "bin" else jc.extract if method == "jetspec" else sm.extract
 
         # Get the requested data
         fileobj = getattr(self, ext)

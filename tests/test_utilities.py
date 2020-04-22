@@ -17,15 +17,34 @@ class TestCombineSpectra(unittest.TestCase):
         # Make spectra for testing
         self.s1 = np.array([np.linspace(0.9, 2.8, 2048), np.random.normal(loc=1000, size=2048), np.random.normal(loc=10, size=2048)])
         self.s2 = np.array([np.linspace(0.6, 1.4, 1632), np.random.normal(loc=1000, size=1632), np.random.normal(loc=10, size=1632)])
+        self.s3 = np.array([np.linspace(0.5, 0.88, 1632), np.random.normal(loc=1000, size=1632), np.random.normal(loc=10, size=1632)])
 
-    def testfunc(self):
-        """Test that the spectra can be combined"""
+    def testOverlap(self):
+        """Test that the spectra can be combined when overlapping"""
         # Run function
-        s3 = u.combine_spectra(self.s1, self.s2)
+        result1 = u.combine_spectra(self.s1, self.s2)
 
         # Check combined spectra result
-        self.assertEqual(s3.ndim, 2)
-        self.assertEqual(s3.shape[0], 3)
+        self.assertEqual(result1.ndim, 2)
+        self.assertEqual(result1.shape[0], 3)
+
+        # # Check if order matters
+        # TODO: This fails right now. Fix it!
+        # result2 = u.combine_spectra(self.s2, self.s1)
+        # self.assertTrue((result1 == result2).all())
+
+    def testNoOverlap(self):
+        """Test that the spectra can be combined when overlapping"""
+        # Run function
+        result1 = u.combine_spectra(self.s1, self.s3)
+
+        # Check combined spectra result
+        self.assertEqual(result1.ndim, 2)
+        self.assertEqual(result1.shape[0], 3)
+
+        # Check if order matters
+        result2 = u.combine_spectra(self.s3, self.s1)
+        self.assertTrue((result1 == result2).all())
 
 
 class TestNanReferencePixels(unittest.TestCase):
