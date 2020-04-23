@@ -13,7 +13,7 @@ import scipy.ndimage.interpolation as spni
 import scipy.signal as sps
 
 
-def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
+def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
@@ -23,6 +23,8 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
         The CLEAR+GR700XD or F277W+GR700XD datacube
     filt: str
         The name of the filter, ['CLEAR', 'F277W']
+    time: sequence
+        The time axis to use
     subarray: str
         The subarray name
     units: astropy.units.quantity.Quantity
@@ -36,17 +38,15 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     # Get wavelengths
     wavelengths = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray='SUBSTRIP256')
 
-    # Calculate median image
-    meddata = np.nanmean(data, axis=(0, 1))
-
     # Calculate the mask
     masks = lt.order_masks(None, subarray=subarray)
 
-    # Run calcSpectrum
-    calcSpectrum(data, mask)
+    # TODO: Use error array
+    err = np.zeros_like(data)
 
-    # Convert to flux using first order response
-    # flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=1, units=units, **kwargs)
+    # Run calcSpectrum
+    wavelength, xpix, flux, stdspec, specerr, specbg = spectrum_extract(data, err, time.jd)
+    counts = np.zeros_like(flux)
 
     # Make results dictionary
     results = {'final': {'wavelength': wavelength, 'counts': counts, 'flux': flux, 'filter': filt, 'subarray': subarray}}
@@ -54,10 +54,224 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     return results
 
 
+def spectrum_extract(data, err, jd,
+                     ncpu = 1,          \
+                     norders = 1,          \
+                     gain = 1.,         \
+                     v0 = 5.,         \
+                     spec_hw = [16,16,16], \
+                     fitbghw = [33,28,20], \
+                     expand = 1,          \
+                     bgdeg = 1,          \
+                     p3thresh = 5,          \
+                     p5thresh = 20,         \
+                     p7thresh = 20,         \
+                     fittype = 'meddata',  \
+                     window_len = 11,         \
+                     deg = 3,          \
+                     isplots = 1,          \
+                     tilt_correct = False,      \
+                     add_noise = False,      \
+                     return_flux = False,      \
+                     **kwargs):
+    """
+    Run spectral extraction routine on a file or directory of files
+
+    Parameters
+    ----------
+    data: sequence
+        The frames of data
+    err: sequence
+        The frames of errors
+    jd: sequence
+        The julian days of each frame
+    ncpu
+         Multiprocessing, code only generates figures when ncpu=1
+    norders
+         Number of spectral orders
+    gain
+         Gain
+    v0
+         Read noise
+    spec_hw
+         Half-width of spectral extraction along trace
+    fitbghw
+         Half-width of background along trace
+    expand
+         Increase resolution for tilt correction (not implemented)
+    bgdeg
+         Polynomial order for background subtraction
+    p3thresh
+         Reject outliers at X-sigma
+    p5thresh
+         Reject outliers at X-sigma
+    p7thresh
+         Reject outliers at X-sigma
+    fittype
+         Optimal weighting profiles: meddata, smooth, wavelet, wavelet2D, gauss, poly
+    window_len
+         Profile smoothing length
+    deg
+         Profile polynomial degree
+    isplots
+         Set from 0 to 7 for less/more figures
+    tilt_correct
+         Correct the tilt of the traces
+    add_noise
+         Add offsets, hot pixels, cosmic rays to data
+
+    """
+    # Reshape data
+    if data.ndim == 4:
+        data.shape = data.shape[0]*data.shape[1], data.shape[2], data.shape[3]
+    if data.ndim == 2:
+        data.shape = 1, data.shape[0], data.shape[1]
+
+    # Re-order data and trim
+    if data.shape[1] == 512:
+        llim, ulim = 75, 331 # Trim the 512 array to 256 pixels
+    else:
+        llim, ulim = 0, -1
+    data = data[:, llim:ulim, ::-1]
+
+    # Create badpixel mask
+    mask = np.ones(data.shape)
+
+    # Define subarray regions for each spectral order
+    ywindow = [[0,data.shape[1]],[0,data.shape[1]],[0,data.shape[1]]]
+    xwindow = [[0,data.shape[2]],[520,data.shape[2]],[1130,data.shape[2]]]
+
+    #Calculate rough trace and wavelength for each order
+    meddata = np.mean(data,axis=0)
+    #meddata = np.median(data,axis=0)
+    #smmeddata = smoothing.smoothing(meddata, (3,3))
+    trace = lt.trace_polynomial(evaluate=True)
+    wave = lt.trace_wavelengths()
+    xpix = [np.arange(start,stop,1) for start,stop in xwindow]
+
+    # for n in range(norders):
+    #     trace.append(calcTrace(meddata, mask[0], xwindow, order=n+1))
+    #     wave.append(calcWave(np.arange(xwindow[n][1],xwindow[n][0],-1), order=n+1))
+    #     if (trace[n].min() < spec_hw[n]) or (trace[n].min() < fitbghw[n]):
+    #         print("WARNING: Spectral extraction goes out-of-bounds for given trace.")
+
+    if add_noise:
+        # Introduce amplifier offset into data
+        data[:, :, 512 ] += 15
+        data[:, :, 512:1024] += 3
+        data[:, :, 1024:1536] += 7
+        data[:, :, 1536:2048] += 2
+
+        # Randomly add hot pixels
+        nhot = 500
+        hotval = 4*np.max(data)
+        nints,ny,nx = data.shape
+        randy = np.random.randint(0,ny,nhot)
+        randx = np.random.randint(0,nx,nhot)
+        data[:,randy,randx] = hotval
+
+        mask2 = np.copy(mask)
+        mask2[:,randy,randx] = 0
+
+        # Insert cosmic rays
+        randy = np.random.randint(10,ny-110,nints)
+        randx = np.random.randint(10,nx-110,nints)
+        randlen = np.random.randint(50,100,nints)
+        for i in range(nints):
+            data[i,randy[i],randx[i]:randx[i]+randlen[i]] = hotval
+    else:
+
+        nints, ny, nx = data.shape
+
+    # Tilt correction
+    if tilt_correct:
+        print("Calculating slit shift values...")
+        slitshift, shift_values, yfit = calc_slitshift2(data[0], ev.xrange, ywindow, xwindow)
+    else:
+        # No tilt correction
+        slitshift = np.zeros(data.shape[2])
+
+    # Initialize arrays
+    global spectra, stdspe, specerr, specbg
+    spectra = []
+    stdspec = []
+    specerr = []
+    specbg = []
+    for n in range(norders):
+        spectra.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
+        stdspec.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
+        specerr.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
+        specbg.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
+
+    # Store data in arrays
+    def store(arg):
+        '''
+        Write spectra, uncertainties, and background to arrays
+        '''
+        spectrum, standardspec, specstd, stdbg, m = arg
+        for n in range(norders):
+            spectra[n][m] = spectrum[n]
+            stdspec[n][m] = standardspec[n]
+            specerr[n][m] = specstd[n]
+            specbg[n][m] = stdbg[n]
+        return
+
+    print('Processing data frames...')
+    print('Total # of integrations: '+str(nints))
+
+    if ncpu == 1:
+        # Only 1 CPU
+        for m in range(nints):
+            store(calcSpectrum(data[m], mask[m], slitshift, \
+                                      xwindow, ywindow, trace, gain, \
+                                      v0, spec_hw, fitbghw, m, \
+                                      p3thresh=p3thresh, p5thresh=p5thresh, \
+                                      p7thresh=p7thresh, meddata=meddata, \
+                                      fittype=fittype, window_len=window_len, \
+                                      deg=deg, expand=expand, isplots=isplots, \
+                                      bgdeg=1))
+
+    else:
+        # Multiple CPUs
+        pool = mp.Pool(ncpu)
+        for m in range(nints):
+            res = pool.apply_async(calcSpectrum, \
+                                   args=(data[m], mask[m], \
+                                         slitshift, xwindow, \
+                                         ywindow, trace, gain, \
+                                         v0, spec_hw, fitbghw, m, \
+                                         p3thresh, p5thresh, p7thresh, \
+                                         meddata, fittype, window_len, \
+                                         deg, expand, False, \
+                                         bgdeg), callback=store)
+        pool.close()
+        pool.join()
+        res.wait()
+
+    # Symmetrize the data so it can be contained in arrays
+    wave, xpix, spectra, stdspec, specerr, specbg = [symmetrize(arr) \
+                for arr in [wave, xpix, spectra, stdspec, specerr, specbg]]
+
+   # Convert to flux
+    if return_flux:
+        for i,spec in enumerate(spectra):
+
+            # Get the wavelength dependent relative scaling for the order
+            scaling = ADUtoFlux(i+1)
+            response = np.interp(wave[i], *scaling, left=np.nan, right=np.nan)
+
+            # Convert each spectrum from ADU/s to erg/s/cm2
+            for j,s in enumerate(spec):
+                spectra[i][j] *= response
+
+    # Return or write to FITS file
+    return wave, xpix, spectra, stdspec, specerr, specbg
+
+
 def calcSpectrum(data, mask, slitshift, xwindow, ywindow, trace, gain, v0, \
                  spec_hw, fitbghw, m, p3thresh=5, p5thresh=10, p7thresh=10, \
                  meddata=None, fittype='smooth', window_len=150, deg=3, \
-                 expand=1, bgdeg=1):
+                 expand=1, bgdeg=1, isplots=1):
     '''
     Driver routine for optimal spectral extraction
 
@@ -139,8 +353,8 @@ def calcSpectrum(data, mask, slitshift, xwindow, ywindow, trace, gain, v0, \
         cormeddata = submeddata
 
         # STEP 3: Fit sky background with out-of-spectra data
-        #corbg = np.zeros((cordata.shape))
-        corbg, cormask = fitbg2(cordata, cormask, corbgmask, deg=bgdeg, threshold=p3thresh, isrotate=2, isplots=isplots)
+        corbg = np.zeros((cordata.shape))
+        # corbg, cormask = fitbg2(cordata, cormask, corbgmask, deg=bgdeg, threshold=p3thresh, isrotate=2, isplots=isplots)
         subdata = cordata
         submask = cormask
         bg = corbg
@@ -188,230 +402,7 @@ def calcSpectrum(data, mask, slitshift, xwindow, ywindow, trace, gain, v0, \
         #np.sqrt(stdvar[np.where(np.isnan(specstd))[0]])
         trmask = tempmask
 
-        # np.savetxt('/Users/jfilippazzo/Desktop/order_{}.txt'.format(n+1), trdata)
-
-    return [spectrum, stdspec, specstd, stdbg, m]
-
-
-def spectrum_extract(filenames,                 \
-                     eventdir = '.',        \
-                     ncpu = 1,          \
-                     norders = 1,          \
-                     gain = 1.,         \
-                     v0 = 5.,         \
-                     spec_hw = [16,16,16], \
-                     fitbghw = [33,28,20], \
-                     expand = 1,          \
-                     bgdeg = 1,          \
-                     p3thresh = 5,          \
-                     p5thresh = 20,         \
-                     p7thresh = 20,         \
-                     fittype = 'meddata',  \
-                     window_len = 11,         \
-                     deg = 3,          \
-                     isplots = 1,          \
-                     tilt_correct = False,      \
-                     add_noise = False,      \
-                     fitsfile = '',         \
-                     return_flux = False,      \
-                     **kwargs):
-    """
-    Run spectral extraction routine on a file or directory of files
-
-    Parameters
-    ----------
-
-    filenames
-         Single or list of filenames to read
-    eventname
-         Name
-    eventdir
-         Directory for save files
-    ncpu
-         Multiprocessing, code only generates figures when ncpu=1
-    norders
-         Number of spectral orders
-    gain
-         Gain
-    v0
-         Read noise
-    spec_hw
-         Half-width of spectral extraction along trace
-    fitbghw
-         Half-width of background along trace
-    expand
-         Increase resolution for tilt correction (not implemented)
-    bgdeg
-         Polynomial order for background subtraction
-    p3thresh
-         Reject outliers at X-sigma
-    p5thresh
-         Reject outliers at X-sigma
-    p7thresh
-         Reject outliers at X-sigma
-    fittype
-         Optimal weighting profiles: meddata, smooth, wavelet, wavelet2D, gauss, poly
-    window_len
-         Profile smoothing length
-    deg
-         Profile polynomial degree
-    isplots
-         Set from 0 to 7 for less/more figures
-    tilt_correct
-         Correct the tilt of the traces
-    add_noise
-         Add offsets, hot pixels, cosmic rays to data
-    fitsfile
-         Write the output to a FITS file at this location
-
-    """
-    # Get data from the file(s)
-    data, err, jd, hdr = rw.read(filenames)
-    if len(data.shape)==2:
-        data = data.reshape([1]+list(data.shape))
-
-    # Re-order data and trim
-    if data.shape[1]==512:
-        llim, ulim = 75, 331 # Trim the 512 array to 256 pixels
-    else:
-        llim, ulim = 0, -1
-    data = data[:,llim:ulim,::-1]
-
-    # Create badpixel mask
-    mask = np.ones(data.shape)
-
-    # Define subarray regions for each spectral order
-    ywindow = [[0,data.shape[1]],[0,data.shape[1]],[0,data.shape[1]]]
-    xwindow = [[0,data.shape[2]],[520,data.shape[2]],[1130,data.shape[2]]]
-
-    #Calculate rough trace and wavelength for each order
-    meddata = np.mean(data,axis=0)
-    #meddata = np.median(data,axis=0)
-    #smmeddata = smoothing.smoothing(meddata, (3,3))
-    trace = []
-    wave = []
-    xpix = [np.arange(start,stop,1) for start,stop in xwindow]
-
-    for n in range(norders):
-        trace.append(calcTrace(meddata, mask[0], xwindow, order=n+1))
-        wave.append(calcWave(np.arange(xwindow[n][1],xwindow[n][0],-1), order=n+1))
-        if (trace[n].min() < spec_hw[n]) or (trace[n].min() < fitbghw[n]):
-            print("WARNING: Spectral extraction goes out-of-bounds for given trace.")
-
-    if add_noise:
-        # Introduce amplifier offset into data
-        data[:,:,
-        512 ] += 15
-        data[:,:, 512:1024] += 3
-        data[:,:,1024:1536] += 7
-        data[:,:,1536:2048] += 2
-
-        # Randomly add hot pixels
-        nhot = 500
-        hotval = 4*np.max(data)
-        nints,ny,nx = data.shape
-        randy = np.random.randint(0,ny,nhot)
-        randx = np.random.randint(0,nx,nhot)
-        data[:,randy,randx] = hotval
-
-        mask2 = np.copy(mask)
-        mask2[:,randy,randx] = 0
-
-        # Insert cosmic rays
-        randy = np.random.randint(10,ny-110,nints)
-        randx = np.random.randint(10,nx-110,nints)
-        randlen = np.random.randint(50,100,nints)
-        for i in range(nints):
-            data[i,randy[i],randx[i]:randx[i]+randlen[i]] = hotval
-    else:
-        nints,ny,nx = data.shape
-
-    # Tilt correction
-    if tilt_correct:
-        print("Calculating slit shift values...")
-        slitshift, shift_values, yfit = calc_slitshift2(data[0], ev.xrange, ywindow, xwindow)
-    else:
-        # No tilt correction
-        slitshift = np.zeros(data.shape[2])
-
-    # Initialize arrays
-    global spectra, stdspe, specerr, specbg
-    spectra = []
-    stdspec = []
-    specerr = []
-    specbg = []
-    for n in range(norders):
-        spectra.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
-        stdspec.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
-        specerr.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
-        specbg.append(np.zeros((nints, xwindow[n][1]-xwindow[n][0])))
-
-    # Store data in arrays
-    def store(arg):
-        '''
-        Write spectra, uncertainties, and background to arrays
-        '''
-        spectrum, standardspec, specstd, stdbg, m = arg
-        for n in range(norders):
-            spectra[n][m] = spectrum[n]
-            stdspec[n][m] = standardspec[n]
-            specerr[n][m] = specstd[n]
-            specbg[n][m] = stdbg[n]
-        return
-
-    print('Processing data frames...')
-    print('Total # of integrations: '+str(nints))
-
-    if ncpu == 1:
-        # Only 1 CPU
-        for m in range(nints):
-            store(calcSpectrum(data[m], mask[m], slitshift, \
-                                      xwindow, ywindow, trace, gain, \
-                                      v0, spec_hw, fitbghw, m, \
-                                      p3thresh=p3thresh, p5thresh=p5thresh, \
-                                      p7thresh=p7thresh, meddata=meddata, \
-                                      fittype=fittype, window_len=window_len, \
-                                      deg=deg, expand=expand, isplots=isplots, \
-                                      eventdir='.', bgdeg=1))
-
-    else:
-        # Multiple CPUs
-        pool = mp.Pool(ncpu)
-        for m in range(nints):
-            res = pool.apply_async(calcSpectrum, \
-                                   args=(data[m], mask[m], \
-                                         slitshift, xwindow, \
-                                         ywindow, trace, gain, \
-                                         v0, spec_hw, fitbghw, m, \
-                                         p3thresh, p5thresh, p7thresh, \
-                                         meddata, fittype, window_len, \
-                                         deg, expand, False, eventdir, \
-                                         bgdeg), callback=store)
-        pool.close()
-        pool.join()
-        res.wait()
-
-    # Symmetrize the data so it can be contained in arrays
-    wave, xpix, spectra, stdspec, specerr, specbg = [rw.symmetrize(arr) \
-                for arr in [wave, xpix, spectra, stdspec, specerr, specbg]]
-
-   # Convert to flux
-    if return_flux:
-        for i,spec in enumerate(spectra):
-
-            # Get the wavelength dependent relative scaling for the order
-            scaling = ADUtoFlux(i+1)
-            response = np.interp(wave[i], *scaling, left=np.nan, right=np.nan)
-
-            # Convert each spectrum from ADU/s to erg/s/cm2
-            for j,s in enumerate(spec):
-                spectra[i][j] *= response
-
-    # Return or write to FITS file
-    if fitsfile:
-        rw.writeFITS(fitsfile, wave, spectra, stdspec, specerr, specbg, jd, hdr)
-    else:
-        return wave, xpix, spectra, stdspec, specerr, specbg
+    return spectrum, stdspec, specstd, stdbg, m
 
 
 def fitbg(dataim, mask, x1, x2, deg=1, threshold=5, isrotate=False, isplots=False):
@@ -875,7 +866,7 @@ def profile_gauss(subdata, mask, threshold=10, guess=None, isplots=False):
     return profile
 
 
-def optimize(subdata, mask, bg, spectrum, Q, v0, p5thresh=10, p7thresh=10, fittype='smooth', window_len=21, deg=3, windowtype='hanning', n=0, isplots=False, eventdir='.',meddata=None):
+def optimize(subdata, mask, bg, spectrum, Q, v0, p5thresh=10, p7thresh=10, fittype='smooth', window_len=21, deg=3, windowtype='hanning', n=0, isplots=False, meddata=None):
     '''
     Extract optimal spectrum with uncertainties
     '''
@@ -934,3 +925,35 @@ def optimize(subdata, mask, bg, spectrum, Q, v0, p5thresh=10, p7thresh=10, fitty
 
     # Return spectrum and uncertainties
     return spectrum, np.sqrt(specvar), submask
+
+def symmetrize(data):
+    '''
+    Make the list of mismatched array sizes into a single array 
+    by padding smaller arrays with NaNs
+    
+    Parameters
+    ----------
+    data: list
+        A list of arrays
+    
+    Returns
+    -------
+    arr: array-like
+        A symmetric array containing the input data
+    '''
+    # Get the largest array shape
+    max_shape = max([i.shape for i in data], key=lambda x: x[-1])
+    shape = [len(data)]+list(max_shape)
+
+    # Make an array of nans
+    arr = np.zeros(shape)*np.nan
+
+    # Paste the data into the new array
+    for i,l1 in enumerate(data):
+        if len(shape)==3:
+            for j,l2 in enumerate(l1):
+                arr[i,j,:len(l2)] = l2
+        elif len(shape)==2:
+            arr[i,:len(l1)] = l1
+
+    return arr

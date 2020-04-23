@@ -232,7 +232,7 @@ class SossExposure(object):
             raise ValueError("No '{}' data to extract.".format(ext))
 
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)['final']
+        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, time=self.time, **kwargs)['final']
         result['method'] = method
 
         # Add the results to the table
