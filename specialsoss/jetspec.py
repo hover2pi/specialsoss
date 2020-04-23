@@ -12,6 +12,8 @@ import scipy.interpolate as spi
 import scipy.ndimage.interpolation as spni
 import scipy.signal as sps
 
+from .utilities import combine_spectra
+
 
 def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
@@ -45,11 +47,11 @@ def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.
     err = np.zeros_like(data)
 
     # Run calcSpectrum
-    wavelength, xpix, flux, stdspec, specerr, specbg = spectrum_extract(data, err, time.jd)
+    wavelength, xpix, flux, stdspec, err, specbg = spectrum_extract(data, err, time.jd)
     counts = np.zeros_like(flux)
 
     # Make results dictionary
-    results = {'final': {'wavelength': wavelength, 'counts': counts, 'flux': flux, 'filter': filt, 'subarray': subarray}}
+    results = {'final': {'wavelength': wavelength[0], 'counts': counts, 'flux': flux[0], 'filter': filt, 'subarray': subarray}}
 
     return results
 
