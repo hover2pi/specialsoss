@@ -7,7 +7,7 @@ import numpy as np
 from hotsoss import utils
 from hotsoss import locate_trace as lt
 
-from .utilities import combine_spectra
+from .utilities import combine_spectra, bin_counts
 
 
 def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
@@ -84,39 +84,3 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
     results['final'] = {'wavelength': wave_final, 'counts': counts, 'flux': flux_final, 'unc': unc_final, 'filter': filt, 'subarray': subarray}
 
     return results
-
-
-def bin_counts(data, wavebins, pixel_mask=None):
-    """
-    Bin the counts in data given the wavelength bin information
-
-    Parameters
-    ----------
-    data: array-like
-        The 3D or 4D data to bin
-    wavebins: sequence
-        A list of lists of the pixels in each wavelength bin
-    pixel_mask: array-like (optional)
-        A 2D mask of 1s and 0s to apply to the data
-
-    Returns
-    -------
-    np.ndarray
-        The counts in each wavelength bin for each frame in data
-    """
-    # Reshape into 3D
-    if data.ndim == 4:
-        data = data.reshape((data.shape[0]*data.shape[1], data.shape[2], data.shape[3]))
-
-    # Array to store counts
-    counts = np.zeros((data.shape[0], len(wavebins)), dtype=float)
-
-    # Apply the pixel mask by multiplying non-signal pixels by 0 before adding
-    if isinstance(pixel_mask, np.ndarray) and pixel_mask.shape == data.shape[1:]:
-        data *= pixel_mask[None, :, :]
-
-    # Add up the counts in each bin in each frame
-    for n, (xpix, ypix) in enumerate(wavebins):
-        counts[:, n] = np.nansum(data[:, xpix, ypix], axis=1)
-
-    return counts

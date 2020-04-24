@@ -12,8 +12,6 @@ import scipy.interpolate as spi
 import scipy.ndimage.interpolation as spni
 import scipy.signal as sps
 
-from .utilities import combine_spectra
-
 
 def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
