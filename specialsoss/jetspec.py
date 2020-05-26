@@ -8,9 +8,7 @@ import astropy.units as q
 from hotsoss import utils
 from hotsoss import locate_trace as lt
 import numpy as np
-import scipy.interpolate as spi
-import scipy.ndimage.interpolation as spni
-import scipy.signal as sps
+# import scipy.signal as sps
 
 
 def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):

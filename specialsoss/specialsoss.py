@@ -15,6 +15,7 @@ import numpy as np
 from . import decontaminate as dec
 from . import summation as sm
 from . import binning as bn
+from . import halftrace as ht
 from . import jetspec as jc
 from . import sossfile as sf
 
@@ -219,12 +220,12 @@ class SossExposure(object):
             A name for the extraction results
         """
         # Validate the method
-        valid_methods = ["bin", "sum", "jetspec"]
+        valid_methods = ["bin", "sum", "jetspec", "halftrace"]
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         # Set the extraction function
-        func = bn.extract if method == "bin" else jc.extract if method == "jetspec" else sm.extract
+        mod = bn if method == "bin" else jc if method == "jetspec" else ht if method == "halftrace" else sm
 
         # Get the requested data
         fileobj = getattr(self, ext)
@@ -232,7 +233,7 @@ class SossExposure(object):
             raise ValueError("No '{}' data to extract.".format(ext))
 
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, time=self.time, **kwargs)['final']
+        result = mod.extract(fileobj.data, filt=self.filter, subarray=self.subarray, time=self.time, **kwargs)['final']
         result['method'] = method
 
         # Add the results to the table
