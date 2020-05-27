@@ -187,7 +187,7 @@ class SossFile:
             time_str = '{} {}'.format(self.header['DATE-OBS'], self.header['TIME-OBS'])
             starttime = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
             dt = timedelta(seconds=self.frame_time)
-            self.time = Time(starttime + dt*np.arange(self.nframes))
+            self.time = Time(starttime + dt * np.arange(self.nframes))
 
             # Get time at end of each integration if 3D data
             if self.data.ndim == 3:

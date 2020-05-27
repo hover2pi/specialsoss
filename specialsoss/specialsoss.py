@@ -58,6 +58,9 @@ class SossExposure(object):
         self.name = name
         self.time = None
 
+        # Dictionary for the extracted spectra
+        self.results = {}
+
         # Store empty SossFile objects
         self.uncal = sf.SossFile()  # 4D Uncalibrated raw input
         self.ramp = sf.SossFile() # 4D Corrected ramp data
@@ -75,9 +78,6 @@ class SossExposure(object):
         # Load the order throughput, wavelength calibration, and order mask files
         self.load_filters()
         self.order_masks = lt.order_masks(self.median)
-
-        # Dictionary for the extracted spectra
-        self.results = {}
 
         # Print uncal warning
         if self.uncal.file is not None:
@@ -233,7 +233,7 @@ class SossExposure(object):
             raise ValueError("No '{}' data to extract.".format(ext))
 
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = mod.extract(fileobj.data, filt=self.filter, subarray=self.subarray, time=self.time, **kwargs)['final']
+        result = mod.extract(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)['final']
         result['method'] = method
 
         # Add the results to the table
@@ -319,6 +319,13 @@ class SossExposure(object):
         self.wavecal = fileobj.wavecal
         self.median = fileobj.median
         self.time = fileobj.time
+
+        # Load the awesimsoss input spectrum as a "result" for direct comparison
+        if fileobj.star is not None:
+            wave, flux = fileobj.star
+            counts = np.ones((fileobj.nframes, len(wave))) * np.nan
+            flux = np.array([flux] * fileobj.nframes)
+            self.results['input'] = {'wavelength': wave, 'flux': flux, 'counts': counts, 'filter': 'None', 'subarray': 'None', 'method': 'None'}
 
         print("'{}' file loaded from {}".format(ext, filepath))
 

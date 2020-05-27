@@ -11,7 +11,7 @@ import numpy as np
 # import scipy.signal as sps
 
 
-def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
+def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
@@ -21,8 +21,6 @@ def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.
         The CLEAR+GR700XD or F277W+GR700XD datacube
     filt: str
         The name of the filter, ['CLEAR', 'F277W']
-    time: sequence
-        The time axis to use
     subarray: str
         The subarray name
     units: astropy.units.quantity.Quantity
@@ -43,7 +41,7 @@ def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.
     err = np.zeros_like(data)
 
     # Run calcSpectrum
-    wavelength, xpix, flux, stdspec, err, specbg = spectrum_extract(data, err, time.jd)
+    wavelength, xpix, flux, stdspec, err, specbg = spectrum_extract(data, err)
     counts = np.zeros_like(flux)
 
     # Make results dictionary
@@ -52,25 +50,26 @@ def extract(data, filt, time, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.
     return results
 
 
-def spectrum_extract(data, err, jd,
-                     ncpu = 1,          \
-                     norders = 1,          \
-                     gain = 1.,         \
-                     v0 = 5.,         \
-                     spec_hw = [16,16,16], \
-                     fitbghw = [33,28,20], \
-                     expand = 1,          \
-                     bgdeg = 1,          \
-                     p3thresh = 5,          \
-                     p5thresh = 20,         \
-                     p7thresh = 20,         \
-                     fittype = 'meddata',  \
-                     window_len = 11,         \
-                     deg = 3,          \
-                     isplots = 1,          \
-                     tilt_correct = False,      \
-                     add_noise = False,      \
-                     return_flux = False,      \
+def spectrum_extract(data, err,\
+                     jd=None,\
+                     ncpu = 1,\
+                     norders = 1,\
+                     gain = 1.,\
+                     v0 = 5.,\
+                     spec_hw = [16,16,16],\
+                     fitbghw = [33,28,20],\
+                     expand = 1,\
+                     bgdeg = 1,\
+                     p3thresh = 5,\
+                     p5thresh = 20,\
+                     p7thresh = 20,\
+                     fittype = 'meddata',\
+                     window_len = 11,\
+                     deg = 3,\
+                     isplots = 1,\
+                     tilt_correct = False,\
+                     add_noise = False,\
+                     return_flux = False,\
                      **kwargs):
     """
     Run spectral extraction routine on a file or directory of files
