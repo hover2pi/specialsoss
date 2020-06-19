@@ -56,7 +56,8 @@ def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.
         flux = utils.counts_to_flux(wavelength, counts, filt=filt, subarray=subarray, order=n+1, units=units, **kwargs)
 
         # TODO: Get the uncertainty
-        unc = np.random.normal(loc=flux, scale=flux*0.01)
+        # unc = np.random.normal(loc=flux, scale=flux*0.01)
+        unc = np.ones_like(counts)
 
         # Make arrays into monotonically increasing arrays
         idx = wavelength.argsort()

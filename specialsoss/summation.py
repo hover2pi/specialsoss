@@ -9,7 +9,7 @@ import numpy as np
 from . import utilities as u
 
 
-def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
+def extract(data, filt, pixel_masks=None, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
@@ -19,6 +19,8 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
         The CLEAR+GR700XD or F277W+GR700XD datacube
     filt: str
         The name of the filter, ['CLEAR', 'F277W']
+    pixel_masks: sequence
+        The pixel masks for each order
     subarray: str
         The subarray name
     units: astropy.units.quantity.Quantity
@@ -36,8 +38,12 @@ def extract(data, filt, subarray='SUBSTRIP256', units=q.erg/q.s/q.cm**2/q.AA, **
     # NaN reference pixels
     data = u.nan_reference_pixels(data)
 
+    # Load the pixel masks
+    if pixel_masks is None:
+        pixel_masks = np.ones((2, data.shape[-2], data.shape[-1]))
+
     # Get total counts in each pixel column
-    counts = np.nansum(data, axis=1)
+    counts = np.nansum(data * pixel_masks[0], axis=1)
 
     # Get the wavelength map
     wavemap = utils.wave_solutions(subarray=subarray, order=1, **kwargs)

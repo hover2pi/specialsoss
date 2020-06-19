@@ -23,11 +23,11 @@ def test_halfmask():
     """Test the halfmask function"""
     # SUBSTRIP96
     sub96 = halftrace.halfmasks(subarray='SUBSTRIP96', plot=True)
-    assert sub96[0].shape == sub96[1].shape == (2048, 96)
+    assert sub96[0].shape == sub96[1].shape == (96, 2048)
 
     # SUBSTRIP256
     sub96 = halftrace.halfmasks(subarray='SUBSTRIP256')
-    assert sub96[0].shape == sub96[1].shape == (2048, 256)
+    assert sub96[0].shape == sub96[1].shape == (256, 2048)
 
     # FULL
     sub96 = halftrace.halfmasks(subarray='FULL')
