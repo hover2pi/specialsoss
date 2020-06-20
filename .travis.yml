@@ -11,5 +11,4 @@ install:
 
 # command to run tests, e.g. python setup.py test
 script:
-  - python -m pytest --cov tests/
-  - coveralls
+  - pytest --cov=specialsoss/

@@ -56,7 +56,29 @@ def extract(data, filt, radius=25, subarray='SUBSTRIP256', contam_end=688, units
     uppercount = bin_counts(data, wavebins[0], pixel_mask=uppermask)
 
     # Calculate a correction in the uncontaminated columns
-    corrcount = (lowercount + uppercount) / (2. * lowercount)
+    # corrcount = (lowercount + uppercount) / (2. * lowercount)
+
+    # Add lowercount and uppercount in the areas of no contamination
+    counts_uncontam = lowercount[:, contam_end:] + uppercount[:, contam_end:]
+    unc_uncontam = np.ones_like(counts_uncontam)
+
+    # ...double lowercount in the areas of upper trace contamination
+    counts_contam = lowercount[:, :contam_end] * 2
+    unc_contam = np.ones_like(counts_contam)
+
+    # Construct order 1 counts
+    order1_counts = np.concatenate([counts_contam, counts_uncontam], axis=1)
+    order1_unc = np.concatenate([unc_contam, unc_uncontam], axis=1)
+
+    # Get order masks and make a mask of their intersection
+    order1mask, order2mask = lt.order_masks(None, save=False) # Can calculate one on the fly here with save=True argument
+    intermask =  np.invert(np.logical_and(order1mask, order2mask))
+
+    # Get order 2 contaminated counts
+    order2_counts = bin_counts(data, wavebins[1], pixel_mask=order2mask)
+
+    
+
 
     # fig1 = figure(width=1000)
     # fig1.line(range(1, 2047), uppercount[-1][1:-2], color='blue', legend='lower')
