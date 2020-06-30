@@ -2,18 +2,17 @@
 
 """A module for the 1D spectral extraction halftrace method"""
 
-import astropy.units as q
 from bokeh.plotting import figure, show
 from bokeh.models import Range1d
 from bokeh.layouts import column
-import numpy as np
-from hotsoss import utils
 from hotsoss import locate_trace as lt
+from hotsoss import plotting as plt
+import numpy as np
 
-from .utilities import combine_spectra, bin_counts, to_3d
+from . import utilities as u
 
 
-def extract(data, filt, radius=25, subarray='SUBSTRIP256', contam_end=688, units=q.erg/q.s/q.cm**2/q.AA, **kwargs):
+def extract(data, filt='CLEAR', radius=25, subarray='SUBSTRIP256', contam_end=688, **kwargs):
     """
     Extract the time-series 1D spectra from a data cube
 
@@ -30,8 +29,6 @@ def extract(data, filt, radius=25, subarray='SUBSTRIP256', contam_end=688, units
     contam_end: idx
         The first column where the upper half of
         order 1 is not contaminated by order 2
-    units: astropy.units.quantity.Quantity
-        The desired units for the output flux
 
     Returns
     -------
@@ -42,58 +39,76 @@ def extract(data, filt, radius=25, subarray='SUBSTRIP256', contam_end=688, units
     results = {}
 
     # Load the wavebins
-    wavelengths = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray='SUBSTRIP256')
-    wavebins = lt.wavelength_bins(subarray=subarray)
+    order1_wave, order2_wave = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray='SUBSTRIP256')
+    order1_bins, order2_bins = lt.wavelength_bins(subarray=subarray)
+    order1_coeffs, order2_coeffs = lt.trace_polynomial(subarray=subarray)
 
     # Reshape
-    data, dims = to_3d(data)
+    data, dims = u.to_3d(data)
+
+    # NaN reference pixels
+    data = u.nan_reference_pixels(data)
+
+    # ========================================================================================
+    # Order 1 trace (lower half of trace is uncontaminated) ==================================
+    # ========================================================================================
 
     # Load the pixel halfmasks for order 1
-    lowermask, uppermask = halfmasks(radius=radius, subarray=subarray)
+    order1_lowermask, order1_uppermask = halfmasks(radius=radius, subarray=subarray, order=1)
 
     # Get the counts in the trace halves
-    lowercount = bin_counts(data, wavebins[0], pixel_mask=lowermask)
-    uppercount = bin_counts(data, wavebins[0], pixel_mask=uppermask)
-
-    # Calculate a correction in the uncontaminated columns
-    # corrcount = (lowercount + uppercount) / (2. * lowercount)
+    order1_lowercount = u.bin_counts(data, order1_bins, pixel_mask=order1_lowermask)
+    order1_uppercount = u.bin_counts(data, order1_bins, pixel_mask=order1_uppermask)
 
     # Add lowercount and uppercount in the areas of no contamination
-    counts_uncontam = lowercount[:, contam_end:] + uppercount[:, contam_end:]
-    unc_uncontam = np.ones_like(counts_uncontam)
+    order1_counts_uncontam = order1_lowercount[:, contam_end:] + order1_uppercount[:, contam_end:]
+    order1_unc_uncontam = np.ones_like(order1_counts_uncontam)
 
     # ...double lowercount in the areas of upper trace contamination
-    counts_contam = lowercount[:, :contam_end] * 2
-    unc_contam = np.ones_like(counts_contam)
+    order1_counts_contam = order1_lowercount[:, :contam_end] * 2
+    order1_unc_contam = np.ones_like(order1_counts_contam)
 
-    # Construct order 1 counts
-    order1_counts = np.concatenate([counts_contam, counts_uncontam], axis=1)
-    order1_unc = np.concatenate([unc_contam, unc_uncontam], axis=1)
+    # Construct order 1 counts from contaminated and uncontaminated pieces
+    order1_counts = np.concatenate([order1_counts_contam, order1_counts_uncontam], axis=1)
+    order1_unc = np.concatenate([order1_unc_contam, order1_unc_uncontam], axis=1)
 
-    # Get order masks and make a mask of their intersection
-    order1mask, order2mask = lt.order_masks(None, save=False) # Can calculate one on the fly here with save=True argument
-    intermask =  np.invert(np.logical_and(order1mask, order2mask))
+    # Plot for visual inspection
+    order1_plot = plt.plot_frame(data[0] * order1_lowermask, cols=[10, 100, 500], title='Order 1 Signal', trace_coeffs=order1_coeffs)
+    show(order1_plot)
 
-    # Get order 2 contaminated counts
-    order2_counts = bin_counts(data, wavebins[1], pixel_mask=order2mask)
+    results['order1'] = {'counts': order1_counts, 'unc': order1_unc, 'wavelength': order1_wave, 'filter': filt, 'subarray': subarray, 'plot': order1_plot}
 
-    
+    # ========================================================================================
+    # Order 2 trace (upper half of trace is uncontaminated) ==================================
+    # ========================================================================================
 
+    if filt == 'CLEAR':
 
-    # fig1 = figure(width=1000)
-    # fig1.line(range(1, 2047), uppercount[-1][1:-2], color='blue', legend='lower')
-    # fig1.line(range(1, 2047), lowercount[-1][1:-2], color='red', legend='upper')
-    #
-    # fig2 = figure(width=1000)
-    # for cc, color in zip(corrcount, ['blue','red','green','cyan']):
-    #     fig2.line(range(2048), cc, color=color)
-    #
-    # show(column(fig1, fig2))
- 
+        # Load the pixel halfmasks for order 1
+        order2_lowermask, order2_uppermask = halfmasks(radius=radius, subarray=subarray, order=2)
+
+        # Get the counts in the trace halves
+        order2_lowercount = u.bin_counts(data, order2_bins, pixel_mask=order2_lowermask)
+        order2_uppercount = u.bin_counts(data, order2_bins, pixel_mask=order2_uppermask)
+
+        # Add lowercount and uppercount in the areas of no contamination
+        order2_counts_uncontam = order2_lowercount[:, contam_end:] + order2_uppercount[:, contam_end:]
+        order2_unc_uncontam = np.ones_like(order2_counts_uncontam)
+
+        # ...double lowercount in the areas of upper trace contamination
+        order2_counts_contam = order2_uppercount[:, :contam_end] * 2
+        order2_unc_contam = np.ones_like(order2_counts_contam)
+
+        # Construct order 1 counts from contaminated and uncontaminated pieces
+        order2_counts = np.concatenate([order2_counts_contam, order2_counts_uncontam], axis=1)
+        order2_unc = np.concatenate([order2_unc_contam, order2_unc_uncontam], axis=1)
+
+        results['order2'] = {'counts': order2_counts, 'unc': order2_unc, 'wavelength': order2_wave, 'filter': filt, 'subarray': subarray}
+
     return results
 
 
-def halfmasks(subarray='SUBSTRIP256', radius=25, plot=False):
+def halfmasks(subarray='SUBSTRIP256', radius=25, order=1, plot=False):
     """
     Generate a mask of the lower and upper halves of the first order trace
 
@@ -112,8 +127,8 @@ def halfmasks(subarray='SUBSTRIP256', radius=25, plot=False):
         The lower and upper masks for the array
     """
     # Get the first order trace
-    trace = lt.trace_polynomial(order=1)
-    trace_vals = lt.trace_polynomial(order=1, evaluate=True)
+    trace = lt.trace_polynomial(order=order)
+    trace_vals = lt.trace_polynomial(order=order, evaluate=True)
     centers = np.ceil(trace_vals).astype(int)
 
     # Split into lower and upper halves
@@ -121,26 +136,28 @@ def halfmasks(subarray='SUBSTRIP256', radius=25, plot=False):
     lowermask = np.zeros(dims)
     uppermask = np.zeros_like(lowermask)
     for n, center in enumerate(centers):
-        lowermask[n, center-radius:center] = 1
-        uppermask[n, center+1:center+1+radius] = 1
+        if 0 < center - radius < 256:
+            lowermask[n, center - radius:center] = 1
+            uppermask[n, center + 1:center + 1 + radius] = 1
 
     # The trace cuts across each center pixel at an angle so calculate the fraction based on the area.
     # Get average between pixel centers to calculate the trace value at each pixel bounds.
     avg = [trace_vals[0]]
     for n in range(1, 2048):
-        avg.append((trace_vals[n-1]+trace_vals[n])/2.)
+        avg.append((trace_vals[n - 1] + trace_vals[n]) / 2.)
     avg.append(trace_vals[-1])
 
     # Calculate the fraction in the lower polygon
-    rectangles = np.array([min(avg[n], avg[n+1])-np.floor(avg[n]) for n in range(2048)])
-    triangles = np.array([0.5*(max(avg[n], avg[n+1])-min(avg[n], avg[n+1])) for n in range(2048)])
+    rectangles = np.array([min(avg[n], avg[n+1]) - np.floor(avg[n]) for n in range(2048)])
+    triangles = np.array([0.5 * (max(avg[n], avg[n + 1]) - min(avg[n], avg[n + 1])) for n in range(2048)])
     lower_frac = rectangles + triangles
 
     # Make a mask for the upper and lower halves of the trace with 0 in masked pixels,
     # 1 in unmasked pixels, and the calculated fraction in the center pixel
     for n, (center, frac) in enumerate(zip(centers, lower_frac)):
-        lowermask[n, center] = frac
-        uppermask[n, center] = 1. - frac
+        if 0 < center < 256:
+            lowermask[n, center] = frac
+            uppermask[n, center] = 1. - frac
 
     # Reshape into subarray
     if subarray == 'SUBSTRIP96':
@@ -157,7 +174,7 @@ def halfmasks(subarray='SUBSTRIP256', radius=25, plot=False):
     # Plot it
     if plot:
 
-        source = dict(lower=[lowermask.T], upper=[uppermask.T], total=[lowermask.T+uppermask.T])
+        source = dict(lower=[lowermask.T], upper=[uppermask.T], total=[lowermask.T + uppermask.T])
         tooltips = [("(x,y)", "($x{int}, $y{int})"), ("Lower", "@lower"), ("Upper", "@upper"), ('Total', '@total')]
         mask_plot = figure(x_range=Range1d(0, 2048), y_range=Range1d(0, dims[1]), width=900, height=int(dims[1]), tooltips=tooltips)
         mask_plot.image(source=source, image='total', x=0, y=0, dh=dims[1], dw=2048, alpha=0.1)

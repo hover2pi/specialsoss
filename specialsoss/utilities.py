@@ -23,6 +23,8 @@ def bin_counts(data, wavebins, pixel_mask=None, plot_bin=None):
         A list of lists of the pixels in each wavelength bin
     pixel_mask: array-like (optional)
         A 2D mask of 1s and 0s to apply to the data
+    plot_bin: int
+        The index of the bin to plot
 
     Returns
     -------

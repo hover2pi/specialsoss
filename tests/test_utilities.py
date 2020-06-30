@@ -5,15 +5,38 @@
 
 import unittest
 
+from hotsoss import locate_trace as lt
 import numpy as np
 
 from specialsoss import utilities as u
 
 
+class TestBinCounts(unittest.TestCase):
+    """Test bincounts function"""
+    def setUp(self):
+        """Make dummy data"""
+        self.tso3d = np.ones((4, 256, 2048))
+        self.tso4d = np.ones((2, 2, 256, 2048))
+        self.bins = lt.wavelength_bins(subarray='SUBSTRIP256')
+
+    def testBin(self):
+        # Make a pixel mask
+        mask = np.zeros((256, 2048))
+        mask[50:100, :] = 1
+
+        # Bin the counts with a mask
+        mask_counts = u.bin_counts(self.tso3d, self.bins[0], pixel_mask=mask, plot_bin=10)
+
+        # Bin the counts without a mask
+        nomask_counts = u.bin_counts(self.tso3d, self.bins[0])
+
+        # Make sure they are different
+        self.assertNotEqual(np.sum(mask_counts), np.sum(nomask_counts))
+
+
 class TestCombineSpectra(unittest.TestCase):
     """Test combine_spectra function"""
     def setUp(self):
-        """Test instance setup"""
         # Make spectra for testing
         self.s1 = np.array([np.linspace(0.9, 2.8, 2048), np.random.normal(loc=1000, size=2048), np.random.normal(loc=10, size=2048)])
         self.s2 = np.array([np.linspace(0.6, 1.4, 1632), np.random.normal(loc=1000, size=1632), np.random.normal(loc=10, size=1632)])
@@ -95,3 +118,34 @@ class TestNanReferencePixels(unittest.TestCase):
 
         # Throw error if 5+ dimensions
         self.assertRaises(ValueError, u.nan_reference_pixels, bad_shape)
+
+
+class TestTo3D(unittest.TestCase):
+    """Test to_3d function"""
+    def setUp(self):
+        """Nothing here"""
+        pass
+
+    def testIt(self):
+        """Test different data shapes"""
+        # 2D
+        data = np.ones((256, 2048))
+        new_data, shape = u.to_3d(data)
+        self.assertEqual(len(shape), data.ndim)
+        self.assertEqual(new_data.ndim, 3)
+
+        # 3D
+        data = np.ones((4, 256, 2048))
+        new_data, shape = u.to_3d(data)
+        self.assertEqual(len(shape), data.ndim)
+        self.assertEqual(new_data.ndim, 3)
+
+        # 4D
+        data = np.ones((2, 2, 256, 2048))
+        new_data, shape = u.to_3d(data)
+        self.assertEqual(len(shape), data.ndim)
+        self.assertEqual(new_data.ndim, 3)
+
+        # 1D
+        data = np.ones(2048)
+        self.assertRaises(ValueError, u.to_3d, data)
