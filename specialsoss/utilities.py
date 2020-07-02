@@ -43,7 +43,8 @@ def bin_counts(data, wavebins, pixel_mask=None, plot_bin=None):
 
     # Add up the counts in each bin in each frame
     for n, (xpix, ypix) in enumerate(wavebins):
-        counts[:, n] = np.nansum(data[:, xpix, ypix], axis=1)
+        cutoff = xpix < dims[-2]
+        counts[:, n] = np.nansum(data[:, xpix[cutoff], ypix[cutoff]], axis=1)
 
     # Plot a bin for visual inspection
     if isinstance(plot_bin, int):

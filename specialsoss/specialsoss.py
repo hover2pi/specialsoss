@@ -337,7 +337,9 @@ class SossExposure(object):
             wave, flux = fileobj.star
             counts = np.ones((fileobj.nframes, len(wave))) * np.nan
             flux = np.array([flux] * fileobj.nframes)
-            self.results['input'] = {'wavelength': wave, 'flux': flux, 'counts': counts, 'filter': 'None', 'subarray': 'None', 'method': 'None'}
+            unc = np.ones_like(counts)
+            self.results['input'] = {'order1': {'wavelength': wave, 'flux': flux, 'counts': counts, 'unc': unc, 'filter': 'None', 'subarray': 'None', 'method': 'None'},
+                                     'order2': {'wavelength': wave, 'flux': flux, 'counts': counts, 'unc': unc, 'filter': 'None', 'subarray': 'None', 'method': 'None'}}
 
         print("'{}' file loaded from {}".format(ext, filepath))
 

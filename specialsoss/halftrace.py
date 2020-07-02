@@ -39,9 +39,9 @@ def extract(data, filt='CLEAR', radius=25, subarray='SUBSTRIP256', contam_end=68
     results = {}
 
     # Load the wavebins
-    order1_wave, order2_wave = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray='SUBSTRIP256')
+    order1_wave, order2_wave = lt.trace_wavelengths(order=None, wavecal_file=None, npix=10, subarray=subarray)
     order1_bins, order2_bins = lt.wavelength_bins(subarray=subarray)
-    order1_coeffs, order2_coeffs = lt.trace_polynomial(subarray=subarray)
+    coeffs = lt.trace_polynomial(subarray=subarray)
 
     # Reshape
     data, dims = u.to_3d(data)
@@ -73,8 +73,7 @@ def extract(data, filt='CLEAR', radius=25, subarray='SUBSTRIP256', contam_end=68
     order1_unc = np.concatenate([order1_unc_contam, order1_unc_uncontam], axis=1)
 
     # Plot for visual inspection
-    order1_plot = plt.plot_frame(data[0] * order1_lowermask, cols=[10, 100, 500], title='Order 1 Signal', trace_coeffs=order1_coeffs)
-    show(order1_plot)
+    order1_plot = plt.plot_frame(data[0] * order1_lowermask, cols=[10, 500, 1500], title='Order 1 Signal', trace_coeffs=coeffs)
 
     results['order1'] = {'counts': order1_counts, 'unc': order1_unc, 'wavelength': order1_wave, 'filter': filt, 'subarray': subarray, 'plot': order1_plot}
 
@@ -103,7 +102,10 @@ def extract(data, filt='CLEAR', radius=25, subarray='SUBSTRIP256', contam_end=68
         order2_counts = np.concatenate([order2_counts_contam, order2_counts_uncontam], axis=1)
         order2_unc = np.concatenate([order2_unc_contam, order2_unc_uncontam], axis=1)
 
-        results['order2'] = {'counts': order2_counts, 'unc': order2_unc, 'wavelength': order2_wave, 'filter': filt, 'subarray': subarray}
+        # Plot for visual inspection
+        order2_plot = plt.plot_frame(data[0] * order2_lowermask, cols=[10, 500, 1500], title='Order 1 Signal', trace_coeffs=coeffs)
+
+        results['order2'] = {'counts': order2_counts, 'unc': order2_unc, 'wavelength': order2_wave, 'filter': filt, 'subarray': subarray, 'plot': order2_plot}
 
     return results
 
