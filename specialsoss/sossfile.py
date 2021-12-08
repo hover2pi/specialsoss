@@ -21,7 +21,7 @@ class SossFile:
     """
     A class object to handle JWST pipeline files for SOSS data
     """
-    def __init__(self, filepath=None, **kwargs):
+    def __init__(self, filepath=None, verbose=False, **kwargs):
         """
         Initialize the SossFile object
         """
@@ -44,11 +44,12 @@ class SossFile:
         self.wavecal = None
         self.time = None
         self.star = None
+        self.verbose = verbose
 
         # Set the filepath to populate the attributes
         self.file = filepath
 
-    def calibrate(self, configdir=None, outdir=None, **kwargs):
+    def calibrate(self, configdir=None, outdir=None, context='jwst_niriss_0134.imap', **kwargs):
         """
         Pipeline process the file
 
@@ -58,6 +59,8 @@ class SossFile:
             The directory containing the configuration files
         outdir: str
             The directory to put the calibrated files into
+        context: str
+            The crds context for the reference files
         """
         # Get config directory
         if configdir is None:
@@ -79,14 +82,16 @@ class SossFile:
             # Create Detector1Pipeline instance
             cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
             from jwst.pipeline import Detector1Pipeline
-            tso1 = Detector1Pipeline.call(self.file, save_results=True, config_file=cfg1_file, output_dir=outdir)
+            tso1 = Detector1Pipeline(save_results=True, config_file=cfg1_file, output_dir=outdir)
+            tso1.ipc.skip = True
+            tso1.run(self.file)
 
             # Calibrated files
             new_files['ramp'] = os.path.join(outdir, file.replace('_uncal.fits', '_ramp.fits'))
             new_files['rate'] = os.path.join(outdir, file.replace('_uncal.fits', '_rate.fits'))
             new_files['rateints'] = os.path.join(outdir, file.replace('_uncal.fits', '_rateints.fits'))
 
-        if self.ext in ['rate', 'rateints']:
+        elif self.ext in ['rate', 'rateints']:
 
             # SPEC2 Pipeline
             cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
@@ -188,14 +193,15 @@ class SossFile:
             starttime = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
             dt = timedelta(seconds=self.frame_time)
             self.time = Time(starttime + dt * np.arange(self.nframes))
+            print(self.time)
 
             # Get time at end of each integration if 3D data
             if self.data.ndim == 3:
                 self.time = self.time[self.ngrps-1::self.ngrps]
 
-            # Otherwise time axis is irrelevant
+            # Otherwise time axis is irrelevant so just use the start time
             if self.data.ndim == 2:
-                self.time = None
+                self.time = Time(starttime)
 
             # Compose a median image from the stack
             if self.ext != 'x1dints':

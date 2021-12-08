@@ -17,6 +17,7 @@ from . import decontaminate as dec
 from . import summation as sm
 from . import binning as bn
 from . import halftrace as ht
+from . import fitpsf as fp
 from . import jetspec as jc
 from . import sossfile as sf
 
@@ -91,6 +92,7 @@ class SossExposure(object):
         # Find the trace in all columns
         self.order_masks = lt.order_masks(self.median, save=True)
 
+        # TODO: Mean or median? Option to fit all frames separately?
         print("New order masks calculated from median image.")
 
     def calibrate(self, ext='uncal', configdir=None, outdir=None, **kwargs):
@@ -109,8 +111,9 @@ class SossExposure(object):
         if ext not in self.levels:
             raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
 
-        # Plot the appropriate file
+        # Calibrate the appropriate file
         fileobj = getattr(self, ext)
+        new_files = {}
         if fileobj.file is not None:
             new_files = fileobj.calibrate(configdir=configdir, outdir=outdir, **kwargs)
 
@@ -231,13 +234,14 @@ class SossExposure(object):
         name: str
             A name for the extraction results
         """
+        # TODO: Add fractional pixel value
         # Validate the method
-        valid_methods = ["bin", "sum", "jetspec", "halftrace"]
+        valid_methods = ["bin", "sum", "jetspec", "halftrace", "fitpsf"]
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         # Set the extraction function
-        mod = bn if method == "bin" else jc if method == "jetspec" else ht if method == "halftrace" else sm
+        mod = bn if method == "bin" else jc if method == "jetspec" else ht if method == "halftrace" else fp if method == "fitpsf" else sm
 
         # Get the requested data
         fileobj = getattr(self, ext)
@@ -320,17 +324,8 @@ class SossExposure(object):
         setattr(self, ext, fileobj)
 
         # Load the attributes
-        self.nints = fileobj.nints
-        self.ngrps = fileobj.ngrps
-        self.nframes = fileobj.nframes
-        self.nrows = fileobj.nrows
-        self.ncols = fileobj.ncols
-        self.filter = fileobj.filter
-        self.frame_time = fileobj.frame_time
-        self.subarray = fileobj.subarray
-        self.wavecal = fileobj.wavecal
-        self.median = fileobj.median
-        self.time = fileobj.time
+        for param in ['nints', 'ngrps', 'nframes', 'nrows', 'ncols', 'filter', 'frame_time', 'subarray', 'wavecal', 'median', 'time']:
+            setattr(self, param, getattr(fileobj, param))
 
         # Load the awesimsoss input spectrum as a "result" for direct comparison
         if fileobj.star is not None:
@@ -584,7 +579,7 @@ class SimExposure(SossExposure):
     """
     def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', level='uncal', **kwargs):
         """
-        Initialize the SOSS extraction object
+        Initialize the SOSS exposure object
 
         Parameters
         ----------
@@ -598,5 +593,20 @@ class SimExposure(SossExposure):
         # Get the file
         file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, level))
 
-        # Inherit from SossObs
+        # Inherit from SossExposure
         super().__init__(file, name='Simulated Observation', **kwargs)
+
+
+class CV3Exposure(SossExposure):
+    """
+    A test instance with the data preloaded
+    """
+    def __init__(self, **kwargs):
+        """
+        Initialize a SOSS CV3 exposure
+        """
+        # Get the file
+        file = resource_filename('specialsoss', 'files/CV3_SUBSTRIP256_CLEAR_uncal.fits')
+
+        # Inherit from SossExposure
+        super().__init__(file, name='CV3 Observation', **kwargs)
