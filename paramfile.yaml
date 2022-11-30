@@ -1,0 +1,134 @@
+
+Inst:
+  instrument: NIRISS
+  mode: soss
+  use_JWST_pipeline: True
+
+Readout:
+  readpatt: NISRAPID
+  ngroup: 2
+  nint: 2
+  nframe: 1
+  nskip: 0
+  resets_bet_ints: 1
+  array_name: NIS_SUBSTRIP256
+  filter: CLEAR
+  pupil: GR700XD
+
+Reffiles:
+  dark: $MIRAGE_DATA/niriss/darks/raw/NISNIRISSDARK-172500017_15_496_SE_2017-09-07T05h28m22_dms_uncal.fits
+  linearized_darkfile: None
+  badpixmask: crds
+  superbias: crds
+  linearity: crds
+  saturation: crds
+  gain: crds
+  pixelflat: crds
+  illumflat: None
+  astrometric: crds
+  ipc: crds
+  invertIPC: True
+  occult: None
+  pixelAreaMap: crds
+  subarray_defs: config
+  readpattdefs: config
+  crosstalk: config
+  filtpupilcombo: config
+  filter_wheel_positions: /Users/jfilippazzo/Documents/Modules/mirage/mirage/config/niriss_filter_and_pupil_wheel_positions.txt
+  flux_cal: config
+  filter_throughput: config
+
+nonlin:
+  limit: 60000.0
+  accuracy: 1e-06
+  maxiter: 10
+  robberto: False
+
+cosmicRay:
+  path: $MIRAGE_DATA/niriss/cosmic_ray_library/
+  library: SUNMIN
+  scale: 1.5
+  suffix: IPC_NIRISS_NIS
+  seed: 2956411739
+
+simSignals:
+  pointsource: None
+  psfpath: $MIRAGE_DATA/niriss/gridded_psf_library/
+  gridded_psf_library_row_padding: 4
+  add_psf_wings: True
+  psf_wing_threshold_file: config
+  psfbasename: niriss
+  psfpixfrac: 0.1
+  psfwfe: predicted
+  psfwfegroup: 0
+  galaxyListFile: None
+  extended: None
+  extendedscale: 1.0
+  extendedCenter: 1024,1024
+  PSFConvolveExtended: True
+  movingTargetList: None
+  movingTargetSersic: None
+  movingTargetExtended: None
+  movingTargetConvolveExtended: True
+  movingTargetToTrack: None
+  expand_catalog_for_segments: False
+  zodiacal: None
+  zodiscale: 1.0
+  scattered: None
+  scatteredscale: 1.0
+  bkgdrate: medium
+  poissonseed: 2012872553
+  photonyield: True
+  pymethod: True
+  use_dateobs_for_background: False
+
+Telescope:
+  ra: 53.1
+  dec: -27.8
+  rotation: 0.0
+  tracking: sidereal
+
+newRamp:
+  dq_configfile: config
+  sat_configfile: config
+  superbias_configfile: config
+  refpix_configfile: config
+  linear_configfile: config
+
+Output:
+  file: New-Target-Simulation_NIS_SOSS_CLEAR_SUBSTRIP256.fits
+  directory: .
+  datatype: linear,raw
+  format: DMS
+  save_intermediates: False
+  grism_source_image: False
+  unsigned: True
+  dmsOrient: True
+  program_number: 42424
+  title: Black Holes at the Restaurant at the End of the Universe
+  PI_Name: D. Adams
+  Proposal_category: GO
+  Science_category: Cosmology
+  observation_number: 002
+  observation_label: Obs1
+  visit_number: 024
+  visit_group: 01
+  visit_id: 88888024002
+  sequence_id: 2
+  activity_id: 2o
+  exposure_number: 00001
+  obs_id: New Target Simulation
+  target_name: New Target
+  target_ra: 1.23456
+  target_dec: 2.34567
+  date_obs: '2022-03-21'
+  time_obs: '18:55:25.907'
+  obs_template: NIRISS SOSS
+  primary_dither_type: NONE
+  total_primary_dither_positions: 1
+  primary_dither_position: 1
+  subpix_dither_type: 2-POINT-MEDIUM-WITH-NIRISS
+  total_subpix_dither_positions: 2
+  subpix_dither_position: 2
+  xoffset: 344.284
+  yoffset: 466.768

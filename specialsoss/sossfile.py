@@ -14,12 +14,14 @@ from hotsoss import plotting as plt
 from hotsoss import utils
 import numpy as np
 
+from .utilities import to_3d
+
 
 class SossFile:
     """
     A class object to handle JWST pipeline files for SOSS data
     """
-    def __init__(self, filepath=None, **kwargs):
+    def __init__(self, filepath=None, verbose=False, **kwargs):
         """
         Initialize the SossFile object
         """
@@ -41,11 +43,13 @@ class SossFile:
         self.median = None
         self.wavecal = None
         self.time = None
+        self.star = None
+        self.verbose = verbose
 
         # Set the filepath to populate the attributes
         self.file = filepath
 
-    def calibrate(self, configdir=None, outdir=None, **kwargs):
+    def calibrate(self, configdir=None, outdir=None, context='jwst_niriss_0134.imap', **kwargs):
         """
         Pipeline process the file
 
@@ -55,6 +59,8 @@ class SossFile:
             The directory containing the configuration files
         outdir: str
             The directory to put the calibrated files into
+        context: str
+            The crds context for the reference files
         """
         # Get config directory
         if configdir is None:
@@ -76,14 +82,16 @@ class SossFile:
             # Create Detector1Pipeline instance
             cfg1_file = os.path.join(configdir, 'calwebb_tso1.cfg')
             from jwst.pipeline import Detector1Pipeline
-            tso1 = Detector1Pipeline.call(self.file, save_results=True, config_file=cfg1_file, output_dir=outdir)
+            tso1 = Detector1Pipeline(save_results=True, config_file=cfg1_file, output_dir=outdir)
+            tso1.ipc.skip = True
+            tso1.run(self.file)
 
             # Calibrated files
             new_files['ramp'] = os.path.join(outdir, file.replace('_uncal.fits', '_ramp.fits'))
             new_files['rate'] = os.path.join(outdir, file.replace('_uncal.fits', '_rate.fits'))
             new_files['rateints'] = os.path.join(outdir, file.replace('_uncal.fits', '_rateints.fits'))
 
-        if self.ext in ['rate', 'rateints']:
+        elif self.ext in ['rate', 'rateints']:
 
             # SPEC2 Pipeline
             cfg2_file = os.path.join(configdir, 'calwebb_tso-spec2.cfg')
@@ -161,6 +169,12 @@ class SossFile:
             else:
                 self.data = hdulist['SCI'].data
 
+            # Try to get 1D input used to make simulation (for extraction testing purposes)
+            try:
+                self.star = hdulist['STAR'].data
+            except KeyError:
+                pass
+
             # Close the file
             hdulist.close()
 
@@ -178,15 +192,16 @@ class SossFile:
             time_str = '{} {}'.format(self.header['DATE-OBS'], self.header['TIME-OBS'])
             starttime = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S.%f")
             dt = timedelta(seconds=self.frame_time)
-            self.time = Time(starttime + dt*np.arange(self.nframes))
+            self.time = Time(starttime + dt * np.arange(self.nframes))
+            print(self.time)
 
             # Get time at end of each integration if 3D data
             if self.data.ndim == 3:
                 self.time = self.time[self.ngrps-1::self.ngrps]
 
-            # Otherwise time axis is irrelevant
+            # Otherwise time axis is irrelevant so just use the start time
             if self.data.ndim == 2:
-                self.time = None
+                self.time = Time(starttime)
 
             # Compose a median image from the stack
             if self.ext != 'x1dints':
@@ -212,13 +227,8 @@ class SossFile:
         if isinstance(idx, int):
 
             # Reshape the data
-            dim = self.data.shape
-            if self.data.ndim == 4:
-                frame = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])[idx]
-            elif self.data.ndim == 2:
-                frame = self.data.reshape(1, dim[0], dim[1])[idx]
-            else:
-                frame = self.data[idx]
+            data, dims = to_3d(self.data)
+            frame = data[idx]
 
         else:
             frame = self.median
@@ -249,17 +259,11 @@ class SossFile:
             The polynomial coefficients of the traces
         """
         # Reshape the data
-        dim = self.data.shape
-        if self.data.ndim == 4:
-            data = self.data.reshape(dim[0]*dim[1], dim[2], dim[3])
-        elif self.data.ndim == 2:
-            data = self.data.reshape(1, dim[0], dim[1])
-        else:
-            data = self.data
+        data, dims = to_3d(self.data)
 
         # Make the figure
         title = '{} Frames'.format(self.ext)
-        coeffs = lt.trace_polynomial()
+        coeffs = coeffs or lt.trace_polynomial()
         fig = plt.plot_frames(data, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         return fig

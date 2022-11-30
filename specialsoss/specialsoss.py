@@ -5,8 +5,10 @@
 from functools import wraps
 import os
 from pkg_resources import resource_filename
+from glob import glob
 
 from bokeh.plotting import show
+from bokeh.layouts import column
 from hotsoss import plotting as plt
 from hotsoss import utils
 from hotsoss import locate_trace as lt
@@ -15,6 +17,9 @@ import numpy as np
 from . import decontaminate as dec
 from . import summation as sm
 from . import binning as bn
+from . import halftrace as ht
+from . import fitpsf as fp
+from . import jetspec as jc
 from . import sossfile as sf
 
 
@@ -48,13 +53,16 @@ class SossExposure(object):
         name: str
             The name of the exposure set
         """
-        # Make sure the file exists
-        if not os.path.exists(filepath):
-            raise FileNotFoundError("{}: Invalid file".format(filepath))
+        # Check that the filpath is a string
+        if not isinstance(filepath, str):
+            raise TypeError("{}: 'filepath' arg must be a string".format(type(filepath)))
 
         # Store attributes
         self.name = name
         self.time = None
+
+        # Dictionary for the extracted spectra
+        self.results = {}
 
         # Store empty SossFile objects
         self.uncal = sf.SossFile()  # 4D Uncalibrated raw input
@@ -67,15 +75,15 @@ class SossExposure(object):
         # Reset file levels
         self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
 
-        # Load the file
-        self.load_file(filepath)
+        # Load the file(s)
+        if filepath.endswith('*.fits'):
+            self.load_files(filepath)
+        else:
+            self.load_file(filepath)
 
         # Load the order throughput, wavelength calibration, and order mask files
         self.load_filters()
         self.order_masks = lt.order_masks(self.median)
-
-        # Dictionary for the extracted spectra
-        self.results = {}
 
         # Print uncal warning
         if self.uncal.file is not None:
@@ -88,6 +96,7 @@ class SossExposure(object):
         # Find the trace in all columns
         self.order_masks = lt.order_masks(self.median, save=True)
 
+        # TODO: Mean or median? Option to fit all frames separately?
         print("New order masks calculated from median image.")
 
     def calibrate(self, ext='uncal', configdir=None, outdir=None, **kwargs):
@@ -106,8 +115,9 @@ class SossExposure(object):
         if ext not in self.levels:
             raise ValueError("'{}' not valid extension. Please use {}".format(ext, self.levels))
 
-        # Plot the appropriate file
+        # Calibrate the appropriate file
         fileobj = getattr(self, ext)
+        new_files = {}
         if fileobj.file is not None:
             new_files = fileobj.calibrate(configdir=configdir, outdir=outdir, **kwargs)
 
@@ -116,7 +126,7 @@ class SossExposure(object):
             self.load_file(file)
 
     @results_required
-    def compare_results(self, idx=0, dtype='flux', names=None, order=None, draw=True):
+    def compare_results(self, idx=0, dtype='counts', names=None, order=None, draw=True):
         """
         Compare results of multiple extraction routines for a given frame
 
@@ -146,7 +156,7 @@ class SossExposure(object):
             ylabel = 'Flux Density [erg/s/cm2/A]'
 
         # Select the extractions
-        fig = None
+        fig1, fig2 = None, None
         if names is None:
             names = self.results.keys()
 
@@ -161,17 +171,28 @@ class SossExposure(object):
                 result = self.results[name]
                 color = next(colors)
 
-                # Draw the figure
-                data = result[dtype]
-                wave = result['wavelength']
-                flux = data[idx]
-                fig = plt.plot_spectrum(wave, flux, fig=fig, legend=name, ylabel=ylabel, color=color, alpha=0.8)
+                # Get the order 1 data
+                order1_result = result['order1']
+                order1_counts = order1_result['counts']
+                order1_unc = order1_result['unc']
+                order1_wave = order1_result['wavelength']
 
-        if fig is not None:
-            if draw:
-                show(fig)
-            else:
-                return fig
+                # Get the order 2 data
+                order2_result = result['order2']
+                order2_counts = order2_result['counts']
+                order2_unc = order2_result['unc']
+                order2_wave = order2_result['wavelength']
+
+                # Draw the figures
+                x = 'Wavelength [um]'
+                y = dtype.upper()
+                fig1 = plt.plot_spectrum(order1_wave, order1_counts[idx], fig=fig1, legend=name, ylabel=ylabel, color=color, alpha=0.8)
+                fig2 = plt.plot_spectrum(order2_wave, order2_counts[idx], fig=fig2, legend=name, ylabel=ylabel, color=color, alpha=0.8)
+
+        if draw:
+            show(column([fig1, fig2]))
+        else:
+            return fig1, fig2
 
     @results_required
     def decontaminate(self, f277w_exposure):
@@ -217,13 +238,14 @@ class SossExposure(object):
         name: str
             A name for the extraction results
         """
+        # TODO: Add fractional pixel value
         # Validate the method
-        valid_methods = ["bin", "sum"]
+        valid_methods = ["bin", "sum", "jetspec", "halftrace", "fitpsf"]
         if method not in valid_methods:
             raise ValueError("{}: Not a valid extraction method. Please use {}".format(method, valid_methods))
 
         # Set the extraction function
-        func = bn.extract if method == "bin" else sm.extract
+        mod = bn if method == "bin" else jc if method == "jetspec" else ht if method == "halftrace" else fp if method == "fitpsf" else sm
 
         # Get the requested data
         fileobj = getattr(self, ext)
@@ -231,7 +253,7 @@ class SossExposure(object):
             raise ValueError("No '{}' data to extract.".format(ext))
 
         # Run the extraction method, returning a dict with keys ['counts', 'wavelength', 'flux']
-        result = func(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)['final']
+        result = mod.extract(fileobj.data, filt=self.filter, subarray=self.subarray, **kwargs)
         result['method'] = method
 
         # Add the results to the table
@@ -298,7 +320,7 @@ class SossExposure(object):
 
         # Determine processing level of input file
         if not any([filepath.endswith('_{}.fits'.format(level)) for level in self.levels]):
-            raise ValueError('Not a recognized JWST file extension. Please use {}'.format(self.levels))
+            raise ValueError('{}: Not a recognized JWST file extension. Please use {}'.format(filepath, self.levels))
 
         # Save the filepath
         ext = filepath.split('_')[-1][:-5]
@@ -306,19 +328,40 @@ class SossExposure(object):
         setattr(self, ext, fileobj)
 
         # Load the attributes
-        self.nints = fileobj.nints
-        self.ngrps = fileobj.ngrps
-        self.nframes = fileobj.nframes
-        self.nrows = fileobj.nrows
-        self.ncols = fileobj.ncols
-        self.filter = fileobj.filter
-        self.frame_time = fileobj.frame_time
-        self.subarray = fileobj.subarray
-        self.wavecal = fileobj.wavecal
-        self.median = fileobj.median
-        self.time = fileobj.time
+        for param in ['nints', 'ngrps', 'nframes', 'nrows', 'ncols', 'filter', 'frame_time', 'subarray', 'wavecal', 'median', 'time']:
+            setattr(self, param, getattr(fileobj, param))
+
+        # Load the awesimsoss input spectrum as a "result" for direct comparison
+        if fileobj.star is not None:
+            wave, flux = fileobj.star
+            counts = np.ones((fileobj.nframes, len(wave))) * np.nan
+            flux = np.array([flux] * fileobj.nframes)
+            unc = np.ones_like(counts)
+            self.results['input'] = {'order1': {'wavelength': wave, 'flux': flux, 'counts': counts, 'unc': unc, 'filter': 'None', 'subarray': 'None', 'method': 'None'},
+                                     'order2': {'wavelength': wave, 'flux': flux, 'counts': counts, 'unc': unc, 'filter': 'None', 'subarray': 'None', 'method': 'None'}}
 
         print("'{}' file loaded from {}".format(ext, filepath))
+
+    def load_files(self, files, **kwargs):
+        """
+        Load the data and headers for a single exposure at multiple calibration levels at once
+
+        Parameters
+        ----------
+        filepath_wildcard: str
+            The filepath with a wildcard * character
+        """
+        # Get a list of files
+        if isinstance(files, str):
+            if files.endswith('*.fits'):
+                files = glob(files)
+            else:
+                files = [files]
+
+        # Load them all
+        for file in files:
+            if not file.endswith('trapsfilled.fits'):
+                self.load_file(file)
 
     def load_filters(self):
         """
@@ -349,15 +392,153 @@ class SossExposure(object):
         fileobj = self._get_extension(ext)
 
         # Make the plot
-        fig = fileobj.plot(scale=scale)
+        fig = fileobj.plot(scale=scale, **kwargs)
 
         if draw:
             show(fig)
         else:
             return fig
 
+    # # From awesimsoss!!
+    # @run_required
+    # def plot_lightcurve(self, column, time_units='s', resolution_mult=20, draw=True):
+    #     """
+    #     Plot a lightcurve for each column index given
+    #
+    #     Parameters
+    #     ----------
+    #     column: int, float, sequence
+    #         The integer column index(es) or float wavelength(s) in microns
+    #         to plot as a light curve
+    #     time_units: string
+    #         The units for the time axis, ['s', 'min', 'h', 'd' (default)]
+    #     resolution_mult: int
+    #         The number of theoretical points to plot for each data point
+    #     draw: bool
+    #         Render the figure instead of returning it
+    #     """
+    #     # Check time_units
+    #     if time_unit not in ['s', 'min', 'h', 'd']:
+    #         raise ValueError("time_unit must be 's', 'min', 'h' or 'd']")
+    #
+    #     # Get the scaled flux in each column for the last group in
+    #     # each integration
+    #     flux_cols = np.nansum(self.tso_ideal.reshape(self.dims3)[self.ngrps - 1::self.ngrps], axis=1)
+    #     flux_cols = flux_cols / np.nanmax(flux_cols, axis=0)[None, :]
+    #
+    #     # Make it into an array
+    #     if isinstance(column, (int, float)):
+    #         column = [column]
+    #
+    #     # Make the figure
+    #     lc = figure()
+    #
+    #     for kcol, col in enumerate(column):
+    #
+    #         color = next(utils.COLORS)
+    #
+    #         # If it is an index
+    #         if isinstance(col, (int, np.integer)):
+    #             lightcurve = flux_cols[:, col]
+    #             label = 'Column {}'.format(col)
+    #
+    #         # Or assumed to be a wavelength in microns
+    #         elif isinstance(col, float):
+    #             waves = np.mean(self.wave[0], axis=0)
+    #             lightcurve = [np.interp(col, waves, flux_col) for flux_col in flux_cols]
+    #             label = '{} um'.format(col)
+    #
+    #         else:
+    #             print('Please enter an index, astropy quantity, or array thereof.')
+    #             return
+    #
+    #         # Plot the theoretical light curve
+    #         if str(type(self.tmodel)) == "<class 'batman.transitmodel.TransitModel'>":
+    #
+    #             # Make theoretical time axis
+    #             time = self.duration * np.arange(self.nframes * resolution_mult)
+    #
+    #             # Generate transit model with time in [days] for batman
+    #             tmodel = batman.TransitModel(self.tmodel, time.to(q.d))
+    #             tmodel.rp = self.rp[col]
+    #             theory = tmodel.light_curve(tmodel)
+    #             theory *= max(lightcurve) / max(theory)
+    #
+    #             # Convert time axis to desired units
+    #             time = time.to(time_units).value
+    #
+    #             # Add to figure
+    #             lc.line(time, theory, legend=label+' model', color=color, alpha=0.8)
+    #
+    #         # Convert data time axis to desired units
+    #         data_time = TimeDelta(self.time - self.time.min()).to(time_units).value
+    #
+    #         # Plot the lightcurve
+    #         lc.circle(data_time, lightcurve, legend=label, color=color)
+    #
+    #     lc.xaxis.axis_label = 'Time [{}]'.format(time_units)
+    #     lc.yaxis.axis_label = 'Transit Depth'
+    #
+    #     if draw:
+    #         show(lc)
+    #     else:
+    #         return lc
+    #
+    # @run_required
+    # def plot_spectrum(self, frame=0, order=None, noise=False, scale='log', draw=True):
+    #     """
+    #     Plot a column sum of counts converted to flux density as a function of the mean column wavelength
+    #
+    #     Parameters
+    #     ----------
+    #     frame: int
+    #         The frame number to plot
+    #     order: sequence
+    #         The order to isolate
+    #     noise: bool
+    #         Plot with the noise model
+    #     scale: str
+    #         Plot scale, ['linear', 'log']
+    #     draw: bool
+    #         Render the figure instead of returning it
+    #     """
+    #     # Get the data cube
+    #     tso = self._select_data(order, noise)
+    #
+    #     # Get counts per wavelength (Column sum for now)
+    #     wave = np.mean(self.wave[0], axis=0)
+    #     counts = np.sum(tso[frame].data, axis=0)
+    #     response = self.order1_response
+    #
+    #     # Convert response in [mJy/ADU/s] to [Flam/ADU/s] then invert so
+    #     # that we can convert the flux at each wavelegth into [ADU/s]
+    #     flux_out = (counts / response / (self.time[np.mod(self.ngrps, frame)]*q.s)).value
+    #
+    #     # Trim wacky extracted edges
+    #     flux_out[0] = flux_out[-1] = np.nan
+    #
+    #     # Plot it along with input spectrum
+    #     flux_in = np.interp(wave, self.star[0], self.star[1])
+    #
+    #     # Make the spectrum plot
+    #     spec = figure(x_axis_type=scale, y_axis_type=scale, width=1024, height=500)
+    #     spec.step(wave, flux_out, mode='center', legend='Extracted', color='red')
+    #     spec.step(wave, flux_in, mode='center', legend='Injected', alpha=0.5)
+    #     spec.yaxis.axis_label = 'Flux Density [{}]'.format(self.star[1].unit)
+    #
+    #     # Get the residuals
+    #     res = figure(x_axis_type=scale, x_range=spec.x_range, width=1024, height=150)
+    #     res.step(wave, flux_out - flux_in, mode='center')
+    #     res.xaxis.axis_label = 'Wavelength [{}]'.format(self.star[0].unit)
+    #     res.yaxis.axis_label = 'Residuals'
+    #
+    #     if draw:
+    #         show(column(spec, res))
+    #     else:
+    #         return column(spec, res)
+
     @results_required
-    def plot_results(self, name=None, dtype='flux', time_fmt='mjd', draw=True):
+    def plot_results(self, name=None, dtype='counts', time_fmt='mjd', draw=True):
         """
         Plot results of all integrations for the given extraction routine
 
@@ -387,21 +568,34 @@ class SossExposure(object):
         if name is None:
             name = names[0]
 
-        # Get the data
+        # Get the data for the named extraction method
         result = self.results[name]
-        data = result[dtype]
-        wave = result['wavelength']
+
+        # Get the order 1 data
+        order1_result = result['order1']
+        order1_counts = order1_result['counts']
+        order1_unc = order1_result['unc']
+        order1_wave = order1_result['wavelength']
+
+        # Get the order 2 data
+        order2_result = result['order2']
+        order2_counts = order2_result['counts']
+        order2_unc = order2_result['unc']
+        order2_wave = order2_result['wavelength']
+
+        # Get time array
         time = self.time.to_value(time_fmt)
 
         # Draw the figure
         x = 'Wavelength [um]'
         y = 'Time [{}]'.format(time_fmt.upper())
-        fig = plt.plot_time_series_spectra(data, wavelength=wave, time=time, ylabel=y, xlabel=x)
+        fig1 = plt.plot_time_series_spectra(order1_counts, wavelength=order1_wave, time=time, ylabel=y, xlabel=x)
+        fig2 = plt.plot_time_series_spectra(order2_counts, wavelength=order2_wave, time=time, ylabel=y, xlabel=x)
 
-        if draw and fig is not None:
-            show(fig)
+        if draw:
+            show(column([fig1, fig2]))
         else:
-            return fig
+            return fig1, fig2
 
 
 class SimExposure(SossExposure):
@@ -410,7 +604,7 @@ class SimExposure(SossExposure):
     """
     def __init__(self, subarray='SUBSTRIP256', filt='CLEAR', level='uncal', **kwargs):
         """
-        Initialize the SOSS extraction object
+        Initialize the SOSS exposure object
 
         Parameters
         ----------
@@ -419,10 +613,25 @@ class SimExposure(SossExposure):
         filt: str
             The desired filter, ['CLEAR', 'F277W']
         level: str
-            The desired level of pipeline processing, ['uncal', 'ramp']
+            The desired level of pipeline processing, ['uncal', 'rateints']
         """
         # Get the file
         file = resource_filename('specialsoss', 'files/{}_{}_{}.fits'.format(subarray, filt, level))
 
-        # Inherit from SossObs
+        # Inherit from SossExposure
         super().__init__(file, name='Simulated Observation', **kwargs)
+
+
+class CV3Exposure(SossExposure):
+    """
+    A test instance with the data preloaded
+    """
+    def __init__(self, **kwargs):
+        """
+        Initialize a SOSS CV3 exposure
+        """
+        # Get the file
+        file = resource_filename('specialsoss', 'files/CV3_SUBSTRIP256_CLEAR_uncal.fits')
+
+        # Inherit from SossExposure
+        super().__init__(file, name='CV3 Observation', **kwargs)
