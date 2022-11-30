@@ -263,7 +263,7 @@ class SossFile:
 
         # Make the figure
         title = '{} Frames'.format(self.ext)
-        coeffs = lt.trace_polynomial()
+        coeffs = coeffs or lt.trace_polynomial()
         fig = plt.plot_frames(data, scale=scale, trace_coeffs=coeffs, wavecal=self.wavecal, title=title, **kwargs)
 
         return fig

@@ -5,6 +5,7 @@
 from functools import wraps
 import os
 from pkg_resources import resource_filename
+from glob import glob
 
 from bokeh.plotting import show
 from bokeh.layouts import column
@@ -52,9 +53,9 @@ class SossExposure(object):
         name: str
             The name of the exposure set
         """
-        # Make sure the file exists
-        if not os.path.exists(filepath):
-            raise FileNotFoundError("{}: Invalid file".format(filepath))
+        # Check that the filpath is a string
+        if not isinstance(filepath, str):
+            raise TypeError("{}: 'filepath' arg must be a string".format(type(filepath)))
 
         # Store attributes
         self.name = name
@@ -74,8 +75,11 @@ class SossExposure(object):
         # Reset file levels
         self.levels = ['uncal', 'ramp', 'rate', 'rateints', 'calints', 'x1dints']
 
-        # Load the file
-        self.load_file(filepath)
+        # Load the file(s)
+        if filepath.endswith('*.fits'):
+            self.load_files(filepath)
+        else:
+            self.load_file(filepath)
 
         # Load the order throughput, wavelength calibration, and order mask files
         self.load_filters()
@@ -316,7 +320,7 @@ class SossExposure(object):
 
         # Determine processing level of input file
         if not any([filepath.endswith('_{}.fits'.format(level)) for level in self.levels]):
-            raise ValueError('Not a recognized JWST file extension. Please use {}'.format(self.levels))
+            raise ValueError('{}: Not a recognized JWST file extension. Please use {}'.format(filepath, self.levels))
 
         # Save the filepath
         ext = filepath.split('_')[-1][:-5]
@@ -337,6 +341,27 @@ class SossExposure(object):
                                      'order2': {'wavelength': wave, 'flux': flux, 'counts': counts, 'unc': unc, 'filter': 'None', 'subarray': 'None', 'method': 'None'}}
 
         print("'{}' file loaded from {}".format(ext, filepath))
+
+    def load_files(self, files, **kwargs):
+        """
+        Load the data and headers for a single exposure at multiple calibration levels at once
+
+        Parameters
+        ----------
+        filepath_wildcard: str
+            The filepath with a wildcard * character
+        """
+        # Get a list of files
+        if isinstance(files, str):
+            if files.endswith('*.fits'):
+                files = glob(files)
+            else:
+                files = [files]
+
+        # Load them all
+        for file in files:
+            if not file.endswith('trapsfilled.fits'):
+                self.load_file(file)
 
     def load_filters(self):
         """
@@ -367,7 +392,7 @@ class SossExposure(object):
         fileobj = self._get_extension(ext)
 
         # Make the plot
-        fig = fileobj.plot(scale=scale)
+        fig = fileobj.plot(scale=scale, **kwargs)
 
         if draw:
             show(fig)
